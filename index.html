@@ -1624,8 +1624,11 @@ async function checkStatus(){
   if(!q){out.innerHTML='<div class="alert ai" style="margin-top:12px">Please enter your email or booking ID.</div>';return;}
   out.innerHTML='<div class="spin"></div>';
   var data=await apiGetQuery('check','query='+encodeURIComponent(q));
-  if(!data){out.innerHTML='<div class="alert ae" style="margin-top:12px">Status lookup is not connected yet. Add your Apps Script URL in BACKEND_SCRIPT_URL inside the HTML file.</div>';return;}
-  if(data.success&&data.bookings&&data.bookings.length>0){
+  if(!data.success){
+    out.innerHTML='<div class="alert ae" style="margin-top:12px">⚠️ '+(data.error||'Status lookup failed.')+'</div>';
+    return;
+  }
+  if(data.bookings&&data.bookings.length>0){
     var bookings=data.bookings;
     if(rescheduleMode){
       // Reschedule mode: only show bookings that can actually be rescheduled (Karigar only, for now)
@@ -1729,21 +1732,33 @@ async function apiGet(action){
   return apiGetQuery(action,'');
 }
 async function apiGetQuery(action,params){
-  if(!SCRIPT_URL()) return null;
+  if(!SCRIPT_URL()) return {success:false,error:'No backend URL configured — BACKEND_SCRIPT_URL is empty.'};
   try{
     var url=SCRIPT_URL()+'?action='+action+(params?'&'+params:'');
     var res=await fetch(url);
     var text=await res.text();
-    return JSON.parse(text);
-  }catch(e){return null;}
+    try{
+      return JSON.parse(text);
+    }catch(parseErr){
+      return {success:false,error:'Backend returned non-JSON (HTTP '+res.status+'). Likely an unauthorized Apps Script deployment or a redeploy is needed. First 150 chars: '+text.substring(0,150)};
+    }
+  }catch(networkErr){
+    return {success:false,error:'Network error reaching backend: '+networkErr.message};
+  }
 }
 async function apiPost(payload){
-  if(!SCRIPT_URL()) return null;
+  if(!SCRIPT_URL()) return {success:false,error:'No backend URL configured — BACKEND_SCRIPT_URL is empty.'};
   try{
     var res=await fetch(SCRIPT_URL(),{method:'POST',body:JSON.stringify(payload)});
     var text=await res.text();
-    return JSON.parse(text);
-  }catch(e){return null;}
+    try{
+      return JSON.parse(text);
+    }catch(parseErr){
+      return {success:false,error:'Backend returned non-JSON (HTTP '+res.status+'). Likely an unauthorized Apps Script deployment or a redeploy is needed. First 150 chars: '+text.substring(0,150)};
+    }
+  }catch(networkErr){
+    return {success:false,error:'Network error reaching backend: '+networkErr.message};
+  }
 }
 
 // ─── FORM RESET ───────────────────────────────────────────────────────────────
