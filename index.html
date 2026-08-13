@@ -891,6 +891,7 @@ textarea{min-height:96px;resize:vertical}
           </div>
         </div>
         <button class="btn btn-p" id="btn-n1" onclick="goStep(2)" disabled>Next: Pick a Date →</button>
+        <button class="btn btn-s" style="width:100%;margin-top:10px" onclick="backToLocationChoice()">← Change Location</button>
       </div>
 
       <!-- STEP 1 (Head Office): Room choice -->
@@ -899,6 +900,7 @@ textarea{min-height:96px;resize:vertical}
         <div class="sub">Pick one room. Capacity is approximate — check with admin if you're close to the limit.</div>
         <div class="dur-grid room-grid" id="room-grid"></div>
         <button class="btn btn-p" id="btn-n1-ho" onclick="goStep(2)" disabled>Next: Pick a Date →</button>
+        <button class="btn btn-s" style="width:100%;margin-top:10px" onclick="backToLocationChoice()">← Change Location</button>
       </div>
 
       <!-- STEP 2: Date -->
@@ -1108,7 +1110,7 @@ textarea{min-height:96px;resize:vertical}
           <p id="success-msg">Your session request is pending approval from the Karigar team.</p>
           <p>You'll receive an email once your booking is confirmed.</p>
           <div class="bid" id="bid"></div>
-          <p style="font-size:.73rem;color:var(--muted)">Save this ID to track or reschedule your booking</p>
+          <p style="font-size:.73rem;color:var(--muted)">This is your reference number. You can check this booking anytime using your email address.</p>
           <div style="margin-top:20px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
             <button class="btn btn-p" style="max-width:200px" onclick="resetForm()">📅 Book Another</button>
             <button class="btn btn-s" onclick="showSection('status',document.getElementById('ai-mybooking'))">🔍 Check Status</button>
@@ -1122,11 +1124,11 @@ textarea{min-height:96px;resize:vertical}
     <div id="tab-status" class="card hidden">
       <div class="ttl" id="status-heading">Check Booking Status</div>
       <p id="status-hint" style="color:var(--muted);font-size:.83rem;margin-bottom:18px;line-height:1.55">
-        Enter your email or Booking ID to see your bookings.
+        Enter your email address to see your bookings.
       </p>
       <div class="fg">
-        <label>Email or Booking ID</label>
-        <input id="sq" type="text" placeholder="you@email.com or KARIGAR12345678" onkeyup="if(event.key==='Enter')checkStatus()"/>
+        <label>Email Address</label>
+        <input id="sq" type="email" placeholder="you@example.com" onkeyup="if(event.key==='Enter')checkStatus()"/>
       </div>
       <button class="btn btn-p" onclick="checkStatus()">🔍 Check Status</button>
       <div id="st-out"></div>
@@ -1264,6 +1266,19 @@ function pickRoom(roomId, el){
   document.getElementById('btn-n1-ho').disabled=false;
   var disp=document.getElementById('f-room-display');
   if(disp) disp.value=roomId;
+}
+
+function backToLocationChoice(){
+  var curId = bookingLocation==='ho' ? 'step-1-ho' : 'step-1';
+  document.getElementById(curId).classList.add('hidden');
+  document.getElementById('steps-indicator').classList.add('hidden');
+  document.getElementById('step-0').classList.remove('hidden');
+  document.querySelectorAll('#step-0 .dur-card, #step-1 .dur-card, #room-grid .dur-card').forEach(function(c){c.classList.remove('selected');});
+  bookingLocation=null; selDur=null; selRoom=null; curStep=0;
+  document.getElementById('btn-n1').disabled=true;
+  document.getElementById('btn-n1-ho').disabled=true;
+  [1,2,3,4,5].forEach(function(i){var s=document.getElementById('si-'+i);if(s)s.classList.remove('active','done');});
+  document.getElementById('si-1').classList.add('active');
 }
 
 // ─── STEP 1 (Karigar) ─────────────────────────────────────────────────────────
@@ -1621,7 +1636,7 @@ async function submitBooking(){
 async function checkStatus(){
   var q=document.getElementById('sq').value.trim();
   var out=document.getElementById('st-out');
-  if(!q){out.innerHTML='<div class="alert ai" style="margin-top:12px">Please enter your email or booking ID.</div>';return;}
+  if(!q){out.innerHTML='<div class="alert ai" style="margin-top:12px">Please enter your email address.</div>';return;}
   out.innerHTML='<div class="spin"></div>';
   var data=await apiGetQuery('check','query='+encodeURIComponent(q));
   if(!data.success){
@@ -1632,7 +1647,7 @@ async function checkStatus(){
     var bookings=data.bookings;
     if(rescheduleMode){
       // Reschedule mode: only show bookings that can actually be rescheduled (Karigar only, for now)
-      bookings=bookings.filter(function(b){return (b.status==='Pending'||b.status==='Approved') && b.location!=='Head Office';});
+      bookings=bookings.filter(function(b){return (b.status==='Pending'||b.status==='Approved');});
     }
     if(bookings.length>0){
       out.innerHTML=bookings.map(function(b){
@@ -1643,7 +1658,7 @@ async function checkStatus(){
           :b.status==='Cancelled'?'🚫 This booking was cancelled.'
           :'⏳ Pending review — you\'ll be notified once confirmed.';
         // Reschedule form: only in reschedule mode, only for Pending/Approved, Karigar only for now
-        var showReschedule=rescheduleMode&&!isHO&&(b.status==='Pending'||b.status==='Approved');
+        var showReschedule=rescheduleMode&&(b.status==='Pending'||b.status==='Approved');
         // Book Again button: only in My Booking mode, only for Declined/Cancelled
         var showRebook=!rescheduleMode&&(b.status==='Declined'||b.status==='Cancelled');
         var locTag='<span class="loc-tag '+(isHO?'loc-tag-ho':'loc-tag-karigar')+'">'+(isHO?'Head Office':'Karigar')+'</span>';
@@ -1659,10 +1674,10 @@ async function checkStatus(){
           +'</div>';
       }).join('');
     } else {
-      out.innerHTML='<div class="alert ai" style="margin-top:12px">No bookings eligible for rescheduling. Only Pending or Approved Karigar bookings can be rescheduled right now.</div>';
+      out.innerHTML='<div class="alert ai" style="margin-top:12px">No bookings eligible for rescheduling. Only Pending or Approved bookings can be rescheduled right now.</div>';
     }
   } else {
-    out.innerHTML='<div class="alert ai" style="margin-top:12px">'+(rescheduleMode?'No eligible bookings found for that email or ID.':'No bookings found for that email or ID.')+'</div>';
+    out.innerHTML='<div class="alert ai" style="margin-top:12px">'+(rescheduleMode?'No eligible bookings found for that email address.':'No bookings found for that email address.')+'</div>';
   }
 }
 
@@ -1685,21 +1700,25 @@ function onRescheduleStartChange(bookingId){
 }
 
 function rescheduleBlock(booking){
+  var isHOBooking = booking.location==='Head Office';
+  var minD = rsMinDate(isHOBooking?'ho':'karigar');
+  var dateLabel = isHOBooking ? 'New Date (same-day is fine)' : 'New Date (must be at least 5 days from today)';
   return '<div class="reschedule-box"><h4>🔄 Need a different time?</h4>'
     +'<div class="reschedule-form">'
-    +'<div class="fg"><label>New Date (must be at least 5 days from today)</label>'
-    +'<input type="date" class="rs-date" id="rs-date-'+booking.id+'" min="'+rsMinDate()+'" style="border-color:#e8c97a"/></div>'
+    +'<div class="fg"><label>'+dateLabel+'</label>'
+    +'<input type="date" class="rs-date" id="rs-date-'+booking.id+'" min="'+minD+'" style="border-color:#e8c97a"/></div>'
     +'<div class="fg"><label>Start Time</label>'
     +'<select id="rs-start-'+booking.id+'" onchange="onRescheduleStartChange(\''+booking.id+'\')" style="border-color:#e8c97a">'+renderRescheduleTimeOptions('')+'</select></div>'
     +'<div class="fg"><label>End Time</label>'
     +'<select id="rs-end-'+booking.id+'" style="border-color:#e8c97a"><option value="">— Select end time —</option></select></div>'
     +'<div style="font-size:.74rem;color:#92400e;margin-top:-4px;margin-bottom:10px">Select the time from the list. Manual typing is disabled.</div>'
-    +'<button class="btn-accent" onclick="submitReschedule(\''+booking.id+'\')">📅 Request Reschedule</button>'
+    +'<button class="btn-accent" onclick="submitReschedule(\''+booking.id+'\',\''+(isHOBooking?'ho':'karigar')+'\')">📅 Request Reschedule</button>'
     +'<div id="rs-msg-'+booking.id+'" style="margin-top:8px"></div>'
     +'</div></div>';
 }
 
-async function submitReschedule(bookingId){
+async function submitReschedule(bookingId, location){
+  var isHOBooking = location==='ho';
   var newDate=document.getElementById('rs-date-'+bookingId).value;
   var newStart=document.getElementById('rs-start-'+bookingId).value;
   var newEnd=document.getElementById('rs-end-'+bookingId).value;
@@ -1713,9 +1732,12 @@ async function submitReschedule(bookingId){
   var parts=newDate.split('-');
   var d=new Date(parseInt(parts[0]),parseInt(parts[1])-1,parseInt(parts[2]));
   d.setHours(0,0,0,0);
-  if(!isDateBookable(d,'karigar')){msgEl.innerHTML='<div class="msg msg-err">Bookings must be made at least 5 days in advance.</div>';return;}
+  if(!isDateBookable(d,location)){
+    msgEl.innerHTML='<div class="msg msg-err">'+(isHOBooking?'Please select today or a later date.':'Bookings must be made at least 5 days in advance.')+'</div>';
+    return;
+  }
   msgEl.innerHTML='<div class="msg msg-warn">⏳ Submitting reschedule request…</div>';
-  var data=await apiPost({action:'reschedule',bookingId:bookingId,newDateKey:newDate,
+  var data=await apiPost({action:isHOBooking?'rescheduleHO':'reschedule',bookingId:bookingId,newDateKey:newDate,
     newDate:d.toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'}),
     newTime:newStart,newEndTime:newEnd});
   if(data&&data.success){
@@ -1800,8 +1822,8 @@ function toMins(h,m,ap){var h2=h%12;if(ap==='PM')h2+=12;return h2*60+m;}
 function parseT(ts){if(!ts)return null;var m=(ts+'').match(/(\d+):(\d+)\s*(AM|PM)/i);return m?toMins(parseInt(m[1]),parseInt(m[2]),m[3].toUpperCase()):null;}
 function hide(id){document.getElementById(id).classList.add('hidden');}
 function showEl(el,txt){el.textContent=txt;el.classList.remove('hidden');}
-function rsMinDate(){return toKey(minLeadDate('karigar'));}
-function rsMaxDate(){var d=new Date(minLeadDate('karigar'));d.setDate(d.getDate()+365);return toKey(d);}
+function rsMinDate(loc){return toKey(minLeadDate(loc));}
+function rsMaxDate(loc){var d=new Date(minLeadDate(loc));d.setDate(d.getDate()+365);return toKey(d);}
 function escapeHtml(str){
   return String(str||'').replace(/[&<>"']/g, function(ch){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch];
@@ -1867,11 +1889,11 @@ function showSection(which, cardEl) {
   if (which === 'reschedule') {
     rescheduleMode = true;
     if (hEl)   hEl.textContent   = 'Reschedule Your Booking';
-    if (hintEl) hintEl.textContent = 'Enter your email or Booking ID. Only Karigar bookings eligible for rescheduling will be shown.';
+    if (hintEl) hintEl.textContent = 'Enter your email address. Bookings eligible for rescheduling will be shown.';
   } else if (which === 'status') {
     rescheduleMode = false;
     if (hEl)   hEl.textContent   = 'Check Booking Status';
-    if (hintEl) hintEl.textContent = 'Enter your email or Booking ID to see your bookings.';
+    if (hintEl) hintEl.textContent = 'Enter your email address to see your bookings.';
   } else {
     rescheduleMode = false;
   }
