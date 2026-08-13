@@ -208,33 +208,6 @@ body{
   margin-left:auto;
 }
 
-/* Section breadcrumb header */
-.section-hdr{
-  max-width:780px;
-  margin:0 auto 20px auto;
-}
-.back-btn{
-  display:inline-flex;
-  align-items:center;
-  gap:5px;
-  font-size:.78rem;
-  font-weight:500;
-  color:var(--muted);
-  background:none;
-  border:none;
-  cursor:pointer;
-  padding:7px 0;
-  font-family:inherit;
-  transition:color .18s;
-}
-.back-btn:hover{color:var(--text)}
-.back-btn::before{content:'←';margin-right:2px}
-.section-crumb{
-  font-size:.78rem;
-  font-weight:600;
-  color:var(--text);
-}
-
 /* ─── CARD ────────────────────────────────────────────────── */
 .card{
   background:var(--surface);
@@ -842,11 +815,6 @@ textarea{min-height:96px;resize:vertical}
   </div>
 
   <div class="content-inner">
-
-    <!-- Section breadcrumb -->
-    <div class="section-hdr">
-      <button class="back-btn" onclick="goToTop()"><span id="section-crumb">Bookings</span></button>
-    </div>
 
     <!-- ═══ BOOKING TAB ═══ -->
     <div id="tab-book" class="card">
@@ -1881,11 +1849,6 @@ function showSection(which, cardEl) {
   });
   if (cardEl) cardEl.classList.add('ac-active');
 
-  // Update the breadcrumb label
-  var labels = { book: 'Booking', status: 'My Booking', reschedule: 'Reschedule' };
-  var crumbEl = document.getElementById('section-crumb');
-  if (crumbEl) crumbEl.textContent = labels[which] || 'Bookings';
-
   // Reschedule reuses the status tab — update heading/hint text accordingly
   var tabKey = (which === 'reschedule') ? 'status' : which;
   var hEl   = document.getElementById('status-heading');
@@ -1922,13 +1885,6 @@ function showSection(which, cardEl) {
   // Reveal the content area
   var cw = document.getElementById('content-wrap');
   cw.classList.remove('hidden');
-}
-
-/** Scrolls back to the top shell so the user can choose a different action */
-function goToTop() {
-  document.querySelector('.top-shell').scrollIntoView({ behavior: 'smooth', block: 'start' });
-  var hint = document.getElementById('nav-hint');
-  if (hint) hint.textContent = 'Select an option above to continue';
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
