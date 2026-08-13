@@ -49,7 +49,7 @@ body{
 .top-shell{
   display:flex;
   align-items:center;
-  padding:40px max(5vw,24px) 28px;
+  padding:28px max(5vw,24px) 12px;
 }
 .ts-inner{
   max-width:1100px;
@@ -58,7 +58,7 @@ body{
   display:grid;
   grid-template-columns:1fr 520px;
   gap:56px;
-  align-items:center;
+  align-items:start;
 }
 
 /* Brand side */
@@ -71,7 +71,7 @@ body{
   letter-spacing:.07em;
   text-transform:uppercase;
   color:var(--primary);
-  margin-bottom:14px;
+  margin-bottom:10px;
 }
 .ts-eyebrow::before{
   content:'';
@@ -85,36 +85,27 @@ body{
   font-family:'Cormorant Garamond',Georgia,serif;
   font-style:italic;
   font-weight:600;
-  font-size:clamp(3rem,6vw,4.8rem);
-  line-height:.95;
+  font-size:clamp(2.6rem,5vw,4rem);
+  line-height:1;
   color:var(--text);
   letter-spacing:-0.025em;
-  margin-bottom:14px;
+  margin-bottom:10px;
 }
 .ts-rule{
   width:34px;
   height:2px;
   background:var(--primary);
-  margin-bottom:12px;
+  margin-bottom:8px;
 }
 .ts-subtitle{
   font-size:.98rem;
   font-weight:500;
   color:var(--text);
-  margin-bottom:5px;
+  margin-bottom:3px;
 }
 .ts-org{
   font-size:.82rem;
   color:var(--muted);
-}
-.ts-tagline{
-  margin-top:16px;
-  padding-top:14px;
-  border-top:1px solid var(--border);
-  font-size:.78rem;
-  color:var(--muted);
-  line-height:1.65;
-  max-width:300px;
 }
 
 /* Action nav side */
@@ -196,7 +187,7 @@ body{
 .ts-nav-hint{
   font-size:.7rem;
   color:var(--muted);
-  margin-top:10px;
+  margin-top:6px;
   padding-left:2px;
   font-weight:400;
 }
@@ -204,7 +195,7 @@ body{
 /* ─── CONTENT AREA ────────────────────────────────────────── */
 .content-wrap{
   background:var(--bg);
-  padding:24px max(5vw,24px) 60px;
+  padding:0 max(5vw,24px) 60px;
 }
 .content-inner{
   max-width:1100px;
@@ -766,9 +757,8 @@ textarea{min-height:96px;resize:vertical}
 }
 @media(max-width:800px){
   .ts-inner{grid-template-columns:1fr;gap:36px}
-  .ts-wordmark{font-size:clamp(3rem,13vw,4.5rem)}
+  .ts-wordmark{font-size:clamp(2.6rem,11vw,3.8rem)}
   .top-shell{min-height:auto;padding:32px 20px 24px}
-  .ts-tagline{max-width:100%}
   .content-inner .card,.content-inner #tab-status{max-width:100%;margin-left:0}
 }
 @media(max-width:500px){
@@ -802,10 +792,6 @@ textarea{min-height:96px;resize:vertical}
       <div class="ts-rule"></div>
       <div class="ts-subtitle">Karigar Skill Sessions &amp; Head Office Meetings</div>
       <div class="ts-org">Pune, Maharashtra</div>
-      <div class="ts-tagline">
-        Reserve a hands-on skill session at Karigar,<br>
-        or a meeting room at the Head Office.
-      </div>
     </div>
 
     <!-- Action nav (right) -->
