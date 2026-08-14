@@ -453,14 +453,6 @@ body{
 .dp-badge{font-size:.66rem;font-weight:700;padding:3px 9px;border-radius:20px}
 .db-a{background:var(--green);color:white}
 .db-p{background:#7BA7C2;color:white}
-.dp-empty{color:var(--muted);font-style:italic;padding:14px 16px;font-size:.81rem}
-
-.legend{
-  display:flex;gap:14px;flex-wrap:wrap;font-size:.71rem;
-  color:var(--muted);margin:6px 0 12px;align-items:center;
-}
-.leg{display:flex;align-items:center;gap:5px}
-.leg-dot{width:8px;height:8px;border-radius:2px}
 
 /* ─── TIME PICKER ─────────────────────────────────────────── */
 .tp-card{
@@ -569,7 +561,6 @@ textarea{min-height:96px;resize:vertical}
   border:none;box-shadow:none;accent-color:var(--primary);
 }
 .checkbox-pill:has(input:checked){border-color:var(--primary);background:var(--primary-light)}
-.field-help{font-size:.71rem;color:var(--muted);margin-top:6px}
 
 /* ─── STEP 4 FORM LAYOUT ──────────────────────────────────── */
 .form-section-lbl{
@@ -698,7 +689,6 @@ textarea{min-height:96px;resize:vertical}
 }
 .ae{background:var(--red-bg);color:var(--red)}
 .ai{background:#e0f2fe;color:#0c4a6e}
-.separator{height:1px;background:var(--border);margin:18px 0}
 
 /* Hidden tabs — kept in DOM for switchTab() JS logic, not displayed */
 .tabs{display:none!important}
@@ -887,9 +877,6 @@ textarea{min-height:96px;resize:vertical}
             <small>Live public Google Calendar</small>
           </div>
           <iframe id="cal-iframe" class="cal-frame" src="" frameborder="0" scrolling="no"></iframe>
-        </div>
-        <div id="ho-cal-note" class="alert ai hidden" style="margin-bottom:16px">
-          ℹ️ Head Office doesn't have its own calendar yet — availability below is pulled directly from bookings on file.
         </div>
 
         <!-- Quick date tile grid (renderDateTiles target) -->
@@ -1201,7 +1188,6 @@ function pickLocation(loc, el){
   if(el) el.classList.add('selected');
 
   document.getElementById('cal-wrap').classList.toggle('hidden', loc==='ho');
-  document.getElementById('ho-cal-note').classList.toggle('hidden', loc!=='ho');
 
   var si1lbl=document.getElementById('si-1-lbl');
   if(si1lbl) si1lbl.textContent = loc==='ho' ? 'Room' : 'Type';
@@ -1316,9 +1302,12 @@ function initStep2(){
   dp.removeAttribute('max');
   dp.value='';
   var noteEl=document.querySelector('.date-note');
-  if(noteEl) noteEl.innerHTML = bookingLocation==='ho'
-    ? '⏳ Head Office rooms can be booked <strong>same-day</strong>. Sundays are open.'
-    : '⏳ Bookings must be at least <strong>5 days in advance</strong>. Sundays are open.';
+  if(noteEl){
+    noteEl.innerHTML = bookingLocation==='ho'
+      ? ''
+      : '⏳ Bookings must be at least <strong>5 days in advance</strong>. Sundays are open.';
+    noteEl.style.display = bookingLocation==='ho' ? 'none' : '';
+  }
   hide('date-ok'); hide('date-err');
   document.getElementById('btn-n2').disabled=true;
   document.getElementById('day-panel').classList.add('hidden');
@@ -1339,6 +1328,10 @@ function onDatePick(val){
   picked.setHours(0,0,0,0);
   if(!isDateBookable(picked,bookingLocation)){
     showEl(errEl, bookingLocation==='ho' ? '⚠️ Please select today or a later date.' : '⚠️ Bookings must be made at least 5 days in advance.');
+    selDate=null; renderDateTiles(); return;
+  }
+  if(bookingLocation==='ho' && picked.getDay()===0){
+    showEl(errEl,'⚠️ Head Office is closed on Sundays. Please pick another date.');
     selDate=null; renderDateTiles(); return;
   }
   selDate=picked;
@@ -1369,10 +1362,13 @@ async function loadCalBk(){
 function renderDateTiles(){
   var wrap=document.getElementById('date-tiles');
   if(!wrap) return;
+  var isHO=bookingLocation==='ho';
   var start=minLeadDate(bookingLocation);
+  var scanDays=isHO?24:21; // HO scans a bit further since Sundays are skipped, keeping ~21 visible tiles
   var html='';
-  for(var i=0;i<21;i++){
+  for(var i=0;i<scanDays;i++){
     var d=new Date(start); d.setDate(start.getDate()+i);
+    if(isHO && d.getDay()===0) continue; // Head Office is closed Sundays
     var key=toKey(d);
     var entries=dayEntries(key);
     var hasApproved=entries.some(function(b){return b.status==='Approved';});
@@ -1382,7 +1378,7 @@ function renderDateTiles(){
     html+='<button type="button" class="date-tile '+cls+selected+'" onclick="pickTileDate(\''+key+'\')">'
       +'<small>'+d.toLocaleDateString('en-IN',{weekday:'short'})+'</small>'
       +'<strong>'+d.getDate()+'</strong>'
-      +'<span>'+(hasApproved?'Booked':(hasPending?'Pending':'Open'))+'</span>'
+      +'<span>'+(hasApproved?'Partial':(hasPending?'Pending':'Open'))+'</span>'
       +'</button>';
   }
   wrap.innerHTML=html;
@@ -1459,7 +1455,24 @@ function checkConflict(){
   var approved=entries.filter(function(b){return b.status==='Approved';});
   var myS=toMins(sH,sM,sAP),myE=toMins(eH,eM,eAP);
   var c=approved.some(function(b){var bs=parseT(b.time),be=parseT(b.endTime);return bs!==null&&be!==null&&myS<be&&myE>bs;});
-  document.getElementById('conflict').classList.toggle('hidden',!c);
+  var conflictEl=document.getElementById('conflict');
+  var btn=document.getElementById('btn-n3');
+  if(bookingLocation==='ho'){
+    conflictEl.classList.toggle('hidden',!c);
+    conflictEl.classList.toggle('msg-err',c);
+    conflictEl.classList.toggle('msg-warn',!c);
+    if(c){
+      conflictEl.innerHTML='⛔ This room is already booked for an overlapping time. Please choose a different time or room.';
+      btn.disabled=true;
+    } else if(myE>myS){
+      btn.disabled=false;
+    }
+  } else {
+    conflictEl.classList.toggle('hidden',!c);
+    conflictEl.classList.remove('msg-err');
+    conflictEl.classList.add('msg-warn');
+    conflictEl.innerHTML='⚠️ Your time overlaps with an approved booking. You can still submit — the team will review.';
+  }
 }
 
 // ─── TIME SELECT HELPERS ──────────────────────────────────────────────────────
@@ -1708,6 +1721,10 @@ async function submitReschedule(bookingId, location){
     msgEl.innerHTML='<div class="msg msg-err">'+(isHOBooking?'Please select today or a later date.':'Bookings must be made at least 5 days in advance.')+'</div>';
     return;
   }
+  if(isHOBooking && d.getDay()===0){
+    msgEl.innerHTML='<div class="msg msg-err">Head Office is closed on Sundays. Please pick another date.</div>';
+    return;
+  }
   msgEl.innerHTML='<div class="msg msg-warn">⏳ Submitting reschedule request…</div>';
   var data=await apiPost({action:isHOBooking?'rescheduleHO':'reschedule',bookingId:bookingId,newDateKey:newDate,
     newDate:d.toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'}),
@@ -1722,9 +1739,6 @@ async function submitReschedule(bookingId, location){
 }
 
 // ─── API HELPERS ──────────────────────────────────────────────────────────────
-async function apiGet(action){
-  return apiGetQuery(action,'');
-}
 async function apiGetQuery(action,params){
   if(!SCRIPT_URL()) return {success:false,error:'No backend URL configured — BACKEND_SCRIPT_URL is empty.'};
   try{
@@ -1795,7 +1809,6 @@ function parseT(ts){if(!ts)return null;var m=(ts+'').match(/(\d+):(\d+)\s*(AM|PM
 function hide(id){document.getElementById(id).classList.add('hidden');}
 function showEl(el,txt){el.textContent=txt;el.classList.remove('hidden');}
 function rsMinDate(loc){return toKey(minLeadDate(loc));}
-function rsMaxDate(loc){var d=new Date(minLeadDate(loc));d.setDate(d.getDate()+365);return toKey(d);}
 function escapeHtml(str){
   return String(str||'').replace(/[&<>"']/g, function(ch){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch];
