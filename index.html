@@ -1010,16 +1010,34 @@ textarea{min-height:96px;resize:vertical}
         <div id="ho-fields" class="hidden">
           <div class="form-section-lbl">Meeting Details</div>
           <div class="fg">
+            <label>Project Name *</label>
+            <input id="f-project" type="text" placeholder="Which project is this meeting for?"/>
+          </div>
+          <div class="fg">
             <label>Room</label>
             <input id="f-room-display" type="text" disabled style="background:var(--bg);color:var(--text);font-weight:600"/>
           </div>
           <div class="fg">
-            <label>Purpose of Meeting *</label>
-            <textarea id="f-purpose" rows="3" placeholder="Briefly describe the purpose of this meeting…"></textarea>
+            <label>Seating Setup</label>
+            <select id="f-seating" onchange="toggleOtherSeating(this.value)">
+              <option value="">— Select seating setup —</option>
+              <option>Classroom</option>
+              <option>U-Shape</option>
+              <option>Boardroom</option>
+              <option>Round Table</option>
+              <option>Other</option>
+            </select>
+            <div id="other-seating-wrap" class="hidden" style="margin-top:10px">
+              <input id="f-seating-other" type="text" placeholder="Please specify the seating setup…"/>
+            </div>
           </div>
           <div class="fg">
             <label>Number of Attendees *</label>
             <input id="f-attendees" type="number" min="1" placeholder="e.g. 6"/>
+          </div>
+          <div class="fg">
+            <label>Any Remarks</label>
+            <textarea id="f-purpose" rows="3" placeholder="Any additional remarks or details… (optional)"></textarea>
           </div>
         </div>
 
@@ -1027,7 +1045,9 @@ textarea{min-height:96px;resize:vertical}
         <div class="form-section-lbl">Additional Requirements <span class="form-section-opt">(Optional)</span></div>
         <div class="fg" style="margin-bottom:0">
           <div class="checkbox-grid req-grid">
-            <label class="checkbox-pill" onclick="toggleReq('food')" style="cursor:pointer"><input type="checkbox" name="f-req" value="Food &amp; Refreshments" id="req-cb-food" style="pointer-events:none"/>🍽️ Food &amp; Refreshments</label>
+            <label class="checkbox-pill req-karigar-only hidden" onclick="toggleReq('food')" style="cursor:pointer"><input type="checkbox" name="f-req" value="Food &amp; Refreshments" id="req-cb-food" style="pointer-events:none"/>🍽️ Food &amp; Refreshments</label>
+            <label class="checkbox-pill req-ho-only hidden" onclick="toggleReq('teacoffee')" style="cursor:pointer"><input type="checkbox" name="f-req" value="Tea/Coffee &amp; Biscuits" id="req-cb-teacoffee" style="pointer-events:none"/>☕ Tea/Coffee &amp; Biscuits</label>
+            <label class="checkbox-pill req-ho-only hidden" onclick="toggleReq('lunchhitea')" style="cursor:pointer"><input type="checkbox" name="f-req" value="Lunch / Hi-Tea" id="req-cb-lunchhitea" style="pointer-events:none"/>🍽️ Lunch / Hi-Tea</label>
             <label class="checkbox-pill" onclick="toggleReq('stationery')" style="cursor:pointer"><input type="checkbox" name="f-req" value="Stationery" id="req-cb-stationery" style="pointer-events:none"/>✏️ Stationery</label>
             <label class="checkbox-pill" onclick="toggleReq('tv')" style="cursor:pointer"><input type="checkbox" name="f-req" value="TV / Projector" id="req-cb-tv" style="pointer-events:none"/>📺 TV / Projector</label>
             <label class="checkbox-pill" onclick="toggleReq('wifi')" style="cursor:pointer"><input type="checkbox" name="f-req" value="Wi-Fi" id="req-cb-wifi" style="pointer-events:none"/>📶 Wi-Fi</label>
@@ -1035,7 +1055,18 @@ textarea{min-height:96px;resize:vertical}
             <label class="checkbox-pill" onclick="toggleReq('vc')" style="cursor:pointer"><input type="checkbox" name="f-req" value="Video Conferencing" id="req-cb-vc" style="pointer-events:none"/>💻 Video Conferencing</label>
             <label class="checkbox-pill" onclick="toggleReq('other')" style="cursor:pointer"><input type="checkbox" name="f-req" value="Other" id="req-cb-other" style="pointer-events:none"/>➕ Other</label>
           </div>
-          <div id="req-wrap-food"       class="hidden" style="margin-top:8px"><textarea id="req-note-food"       rows="2" placeholder="Details for Food &amp; Refreshments…"  style="resize:vertical;min-height:64px"></textarea></div>
+          <div id="req-wrap-food"       class="hidden" style="margin-top:8px"><textarea id="req-note-food"       rows="2" placeholder="Details for Food &amp; Refreshments…"     style="resize:vertical;min-height:64px"></textarea></div>
+          <div id="req-wrap-teacoffee"  class="hidden" style="margin-top:8px"><textarea id="req-note-teacoffee"  rows="2" placeholder="Details for Tea/Coffee &amp; Biscuits…"    style="resize:vertical;min-height:64px"></textarea></div>
+          <div id="req-wrap-lunchhitea" class="hidden" style="margin-top:8px"><textarea id="req-note-lunchhitea" rows="2" placeholder="Details for Lunch / Hi-Tea…"              style="resize:vertical;min-height:64px"></textarea></div>
+          <div id="budget-approval-wrap" class="hidden" style="margin-top:8px">
+            <label>Budget Approval *</label>
+            <select id="f-budget-approval">
+              <option value="">— Select —</option>
+              <option value="Yes">Yes</option>
+              <option value="No">No</option>
+            </select>
+            <div style="font-size:.71rem;color:var(--muted);margin-top:6px">Required since Lunch / Hi-Tea is requested.</div>
+          </div>
           <div id="req-wrap-stationery" class="hidden" style="margin-top:8px"><textarea id="req-note-stationery" rows="2" placeholder="Details for Stationery…"                style="resize:vertical;min-height:64px"></textarea></div>
           <div id="req-wrap-tv"         class="hidden" style="margin-top:8px"><textarea id="req-note-tv"         rows="2" placeholder="Details for TV / Projector…"            style="resize:vertical;min-height:64px"></textarea></div>
           <div id="req-wrap-wifi"       class="hidden" style="margin-top:8px"><textarea id="req-note-wifi"       rows="2" placeholder="Details for Wi-Fi…"                     style="resize:vertical;min-height:64px"></textarea></div>
@@ -1107,7 +1138,7 @@ textarea{min-height:96px;resize:vertical}
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
 const PUBLIC_CALENDAR_EMBED_URL = 'https://calendar.google.com/calendar/embed?src=c_f52c1786104054526a8c486e0767da89d6f225bad1974494ab17b5a99a487abe%40group.calendar.google.com&ctz=Asia%2FKolkata&mode=MONTH&showTitle=0&showNav=1&showDate=1&showPrint=0&showTabs=0&showCalendars=0&showTz=0&bgcolor=%23ffffff';
 const PUBLIC_HO_CALENDAR_EMBED_URL = 'https://calendar.google.com/calendar/embed?src=c_d56780c3de6541d596c391d04a5438be6caddbdca50fe1fd4009a0eb3a628895%40group.calendar.google.com&ctz=Asia%2FKolkata&mode=MONTH&showTitle=0&showNav=1&showDate=1&showPrint=0&showTabs=0&showCalendars=0&showTz=0&bgcolor=%23ffffff';
-const BACKEND_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxvWuLaa7JOZdNh8T0gXKeZF55C_4xeHIZP3ABY3aZQp9VvHTSzfxgVRYpxxfmwfmrT/exec';
+const BACKEND_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwAUs1SHd_fmKteiN4Su2okhd42qpj81H_JZUpZZmGigQYWo3c94OGBMKMZbfaDrU_v/exec';
 const CALENDAR_AUTO_REFRESH_MS = 60000;
 
 // Head Office rooms — capacities for Meeting Rooms 1–3 are ESTIMATES (not yet confirmed).
@@ -1157,7 +1188,6 @@ var curStep=0, selDur=null, selDate=null, calBk={};
 var bookingLocation=null; // 'karigar' | 'ho'
 var selRoom=null;
 var sH=9,sM=0,sAP='AM',eH=5,eM=0,eAP='PM';
-var today=new Date(); today.setHours(0,0,0,0);
 var rescheduleMode=false; // true when user entered via the Reschedule action card
 var DUR_LBL={full:'Full Day',half:'Half Day',hourly:'Hourly'};
 var DUR_DEF={
@@ -1197,7 +1227,22 @@ function pickLocation(loc, el){
   document.getElementById('step-1').classList.toggle('hidden', loc!=='karigar');
   document.getElementById('step-1-ho').classList.toggle('hidden', loc!=='ho');
 
+  document.querySelectorAll('.req-karigar-only').forEach(function(el){el.classList.toggle('hidden', loc!=='karigar');});
+  document.querySelectorAll('.req-ho-only').forEach(function(el){el.classList.toggle('hidden', loc!=='ho');});
+  // Reset the food-related checkboxes each time location is (re)picked, so a
+  // hidden, previously-checked box from the other location can't leak into
+  // this booking's requirements.
+  ['food','teacoffee','lunchhitea'].forEach(function(key){
+    var cb=document.getElementById('req-cb-'+key);
+    if(cb) cb.checked=false;
+    var wrap=document.getElementById('req-wrap-'+key);
+    if(wrap) wrap.classList.add('hidden');
+    var note=document.getElementById('req-note-'+key);
+    if(note) note.value='';
+  });
+
   if(loc==='ho') renderRooms();
+  updateBudgetApprovalVisibility();
 
   document.getElementById('step-0').classList.add('hidden');
   document.getElementById('steps-indicator').classList.remove('hidden');
@@ -1255,8 +1300,11 @@ function goStep(n){
     var err=document.getElementById('form-err');
     var nm=v('f-name'),ph=v('f-phone'),em=v('f-email');
     if(bookingLocation==='ho'){
-      var purpose=v('f-purpose'),attendees=v('f-attendees');
-      if(!nm||!ph||!em||!purpose||!attendees){showEl(err,'Please fill in all required fields.');return;}
+      var projectName=v('f-project'),attendees=v('f-attendees');
+      if(!nm||!ph||!em||!projectName||!attendees){showEl(err,'Please fill in all required fields.');return;}
+      if(v('f-seating')==='Other' && !v('f-seating-other')){showEl(err,'Please specify your "Other" seating setup.');return;}
+      var lunchCb=document.getElementById('req-cb-lunchhitea');
+      if(lunchCb && lunchCb.checked && !v('f-budget-approval')){showEl(err,'Please indicate whether budget approval has been obtained for Lunch / Hi-Tea.');return;}
     } else {
       var type=v('f-type'),details=v('f-work-details'),labs=getSelectedLabs();
       if(!nm||!ph||!em||!type||!details||!labs.length){showEl(err,'Please fill in all required fields, including at least one lab.');return;}
@@ -1538,19 +1586,34 @@ function onEndTimeChange(val){
 }
 
 // ─── SUMMARY & SUBMIT ─────────────────────────────────────────────────────────
+function getSeatingValue(){
+  var val=v('f-seating');
+  if(!val) return '';
+  if(val==='Other'){
+    var other=v('f-seating-other');
+    return other ? 'Other: '+other : 'Other';
+  }
+  return val;
+}
+
 function buildSummary(){
+  var budgetVal=v('f-budget-approval');
+  var budgetRow = budgetVal ? row('💰 Budget Approval',budgetVal) : '';
   var html = bookingLocation==='ho'
     ? row('🏢 Location','<span class="pill pill-p">Head Office</span>')
+      + row('📁 Project',v('f-project'))
       + row('🚪 Room', selRoom)
+      + row('🪑 Seating Setup',escapeHtml(getSeatingValue()||'—'))
       + row('📅 Date',selDate.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'long',year:'numeric'}))
       + row('🕐 From','<span class="pill pill-t">'+fmtT(sH,sM,sAP)+'</span>')
       + row('🕔 To','<span class="pill pill-t">'+fmtT(eH,eM,eAP)+'</span>')
-      + row('🎯 Purpose',escapeHtml(v('f-purpose')))
       + row('👥 Attendees',escapeHtml(v('f-attendees')))
+      + row('📝 Remarks',escapeHtml(v('f-purpose')||'None'))
       + row('👤 Name',v('f-name'))
       + row('📞 Phone',v('f-phone'))
       + row('📧 Email',v('f-email'))
       + row('📋 Requirements',escapeHtml(getSelectedReqs().join(', ')||'None'))
+      + budgetRow
     : row('⏱ Session Type','<span class="pill pill-p">'+DUR_LBL[selDur]+'</span>')
       + row('📅 Date',selDate.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'long',year:'numeric'}))
       + row('🕐 From','<span class="pill pill-t">'+fmtT(sH,sM,sAP)+'</span>')
@@ -1577,6 +1640,9 @@ async function submitBooking(){
       action:'bookHO',
       room:selRoom,
       name:v('f-name'), phone:v('f-phone'), email:v('f-email'),
+      projectName:v('f-project'),
+      seatingSetup:getSeatingValue(),
+      budgetApproval:v('f-budget-approval'),
       purpose:v('f-purpose'), attendees:v('f-attendees'),
       additionalRequirements:getSelectedReqs(),
       date:selDate.toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'}),
@@ -1650,7 +1716,7 @@ async function checkStatus(){
         var showRebook=!rescheduleMode&&(b.status==='Declined'||b.status==='Cancelled');
         var locTag='<span class="loc-tag '+(isHO?'loc-tag-ho':'loc-tag-karigar')+'">'+(isHO?'Head Office':'Karigar')+'</span>';
         var rowsHtml = isHO
-          ? row('🚪 Room',b.room||'—')+row('🎯 Purpose',b.purpose||'—')+row('👥 Attendees',b.attendees||'—')+row('📋 Requirements',escapeHtml(b.additionalRequirements||'None'))+row('📅 Date',b.date)+row('🕐 From',b.time||'—')+row('🕔 To',b.endTime||'—')
+          ? row('📁 Project',b.projectName||'—')+row('🚪 Room',b.room||'—')+row('🪑 Seating Setup',b.seatingSetup||'—')+row('👥 Attendees',b.attendees||'—')+row('📝 Remarks',b.purpose||'None')+row('📋 Requirements',escapeHtml(b.additionalRequirements||'None'))+(b.budgetApproval?row('💰 Budget Approval',b.budgetApproval):'')+row('📅 Date',b.date)+row('🕐 From',b.time||'—')+row('🕔 To',b.endTime||'—')
           : row('⏱ Session Type',b.duration||'—')+row('🏷 Type of Work',b.typeOfWork||b.service||'—')+row('🏫 Labs',b.labs||'—')+row('📝 Details',b.workDetails||'—')+row('📋 Requirements',escapeHtml(b.additionalRequirements||'None'))+row('📅 Date',b.date)+row('🕐 From',b.time||'—')+row('🕔 To',b.endTime||'—');
         return '<div class="stcard">'
           +'<div class="stcard-head"><strong>'+locTag+(isHO?(b.room||'Meeting'):(b.typeOfWork||b.service||'—'))+'</strong><span class="stb stb-'+b.status+'">'+b.status+'</span></div>'
@@ -1774,13 +1840,17 @@ async function apiPost(payload){
 // ─── FORM RESET ───────────────────────────────────────────────────────────────
 function resetForm(){
   selDur=null;selDate=null;curStep=0;calBk={};rescheduleMode=false;bookingLocation=null;selRoom=null;
-  ['f-name','f-phone','f-email','f-work-details','f-purpose','f-attendees','f-room-display'].forEach(function(id){
+  ['f-name','f-phone','f-email','f-work-details','f-purpose','f-attendees','f-room-display','f-project','f-seating-other'].forEach(function(id){
     var el=document.getElementById(id); if(el) el.value='';
   });
   document.getElementById('f-type').value='';
   document.getElementById('f-type-other').value='';
   document.getElementById('other-type-wrap').classList.add('hidden');
-  ['food','stationery','tv','wifi','chairs','vc','other'].forEach(function(key){
+  document.getElementById('f-seating').value='';
+  document.getElementById('other-seating-wrap').classList.add('hidden');
+  document.getElementById('f-budget-approval').value='';
+  document.getElementById('budget-approval-wrap').classList.add('hidden');
+  ['food','teacoffee','lunchhitea','stationery','tv','wifi','chairs','vc','other'].forEach(function(key){
     var cb = document.getElementById('req-cb-' + key);
     if(cb) cb.checked = false;
     var wrap = document.getElementById('req-wrap-' + key);
@@ -1822,7 +1892,12 @@ function toggleOtherType(val){
   if(val !== 'Other') document.getElementById('f-type-other').value = '';
 }
 
-var REQ_KEYS = ['food','stationery','tv','wifi','chairs','vc','other'];
+function toggleOtherSeating(val){
+  document.getElementById('other-seating-wrap').classList.toggle('hidden', val !== 'Other');
+  if(val !== 'Other') document.getElementById('f-seating-other').value = '';
+}
+
+var REQ_KEYS = ['food','teacoffee','lunchhitea','stationery','tv','wifi','chairs','vc','other'];
 
 function toggleReq(key){
   var cb   = document.getElementById('req-cb-' + key);
@@ -1834,11 +1909,35 @@ function toggleReq(key){
   } else {
     document.getElementById('req-note-' + key).value = '';
   }
+  updateBudgetApprovalVisibility();
+}
+
+// Budget Approval only applies to HO bookings where Lunch / Hi-Tea is checked.
+// Karigar has no split checkboxes and no Budget Approval field at all.
+function updateBudgetApprovalVisibility(){
+  var wrap=document.getElementById('budget-approval-wrap');
+  if(!wrap) return;
+  var lunchCb=document.getElementById('req-cb-lunchhitea');
+  var show = bookingLocation==='ho' && lunchCb && lunchCb.checked;
+  wrap.classList.toggle('hidden', !show);
+  if(!show){
+    var sel=document.getElementById('f-budget-approval');
+    if(sel) sel.value='';
+  }
 }
 
 function getSelectedReqs(){
   var out = [];
-  REQ_KEYS.forEach(function(key){
+  // Food-related keys are location-specific — 'food' is Karigar-only,
+  // 'teacoffee'/'lunchhitea' are HO-only. Filtering here is a safety net on
+  // top of the visibility toggle, so a stale checked state from switching
+  // locations can never leak into the wrong booking's requirements.
+  var activeKeys = REQ_KEYS.filter(function(key){
+    if(key==='food') return bookingLocation!=='ho';
+    if(key==='teacoffee'||key==='lunchhitea') return bookingLocation==='ho';
+    return true;
+  });
+  activeKeys.forEach(function(key){
     var cb = document.getElementById('req-cb-' + key);
     if(cb && cb.checked){
       var note = (document.getElementById('req-note-' + key).value || '').trim();
