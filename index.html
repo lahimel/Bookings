@@ -1106,7 +1106,7 @@ textarea{min-height:96px;resize:vertical}
 <script>
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
 const PUBLIC_CALENDAR_EMBED_URL = 'https://calendar.google.com/calendar/embed?src=c_f52c1786104054526a8c486e0767da89d6f225bad1974494ab17b5a99a487abe%40group.calendar.google.com&ctz=Asia%2FKolkata&mode=MONTH&showTitle=0&showNav=1&showDate=1&showPrint=0&showTabs=0&showCalendars=0&showTz=0&bgcolor=%23ffffff';
-const PUBLIC_ICAL_URL = 'https://calendar.google.com/calendar/ical/c_880b027690f4ea7102835335b1aaacbb1888260ec8b08db543aaed9eab6a878b%40group.calendar.google.com/public/basic.ics';
+const PUBLIC_HO_CALENDAR_EMBED_URL = 'https://calendar.google.com/calendar/embed?src=c_d56780c3de6541d596c391d04a5438be6caddbdca50fe1fd4009a0eb3a628895%40group.calendar.google.com&ctz=Asia%2FKolkata&mode=MONTH&showTitle=0&showNav=1&showDate=1&showPrint=0&showTabs=0&showCalendars=0&showTz=0&bgcolor=%23ffffff';
 const BACKEND_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxvWuLaa7JOZdNh8T0gXKeZF55C_4xeHIZP3ABY3aZQp9VvHTSzfxgVRYpxxfmwfmrT/exec';
 const CALENDAR_AUTO_REFRESH_MS = 60000;
 
@@ -1126,7 +1126,8 @@ function getSelectedLabs(){return Array.from(document.querySelectorAll('input[na
 function clearSelectedLabs(){document.querySelectorAll('input[name="f-lab"]').forEach(function(el){el.checked=false;});}
 
 function buildCalEmbedUrl(){
-  return PUBLIC_CALENDAR_EMBED_URL + '&_ts=' + Date.now();
+  var base = bookingLocation==='ho' ? PUBLIC_HO_CALENDAR_EMBED_URL : PUBLIC_CALENDAR_EMBED_URL;
+  return base + '&_ts=' + Date.now();
 }
 
 function updateCalEmbed(){
@@ -1187,7 +1188,8 @@ function pickLocation(loc, el){
   document.querySelectorAll('#step-0 .dur-card').forEach(function(c){c.classList.remove('selected');});
   if(el) el.classList.add('selected');
 
-  document.getElementById('cal-wrap').classList.toggle('hidden', loc==='ho');
+  var calLabel=document.querySelector('.cal-head span');
+  if(calLabel) calLabel.textContent = loc==='ho' ? '📅 Head Office Bookings Calendar' : '📅 Karigar Bookings Calendar';
 
   var si1lbl=document.getElementById('si-1-lbl');
   if(si1lbl) si1lbl.textContent = loc==='ho' ? 'Room' : 'Type';
