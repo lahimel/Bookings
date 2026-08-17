@@ -1731,10 +1731,14 @@ async function checkStatus(){
         // Book Again button: only in My Booking mode, only for Declined/Cancelled
         var showRebook=!rescheduleMode&&(b.status==='Declined'||b.status==='Cancelled');
         // Update Budget Info: only in My Booking mode, HO bookings with Lunch/Hi-Tea
-        // requested and budget still marked "No" on a live (not declined/cancelled) booking.
+        // requested and a live (not declined/cancelled) booking, where EITHER budget
+        // is still marked "No", OR it's "Yes" but somehow has no attachment on file
+        // (e.g. from before Drive access was authorized) - lets that be backfilled
+        // here instead of needing a manual sheet edit.
         var reqsStr=String(b.additionalRequirements||'');
+        var needsBudgetBackfill=b.budgetApproval==='Yes'&&!b.budgetAttachmentFileId&&!b.budgetAttachmentUrl;
         var showBudgetUpdate=!rescheduleMode&&isHO&&(b.status==='Pending'||b.status==='Approved')
-          &&b.budgetApproval==='No'&&reqsStr.indexOf('Lunch / Hi-Tea')>-1;
+          &&reqsStr.indexOf('Lunch / Hi-Tea')>-1&&(b.budgetApproval==='No'||needsBudgetBackfill);
         var locTag='<span class="loc-tag '+(isHO?'loc-tag-ho':'loc-tag-karigar')+'">'+(isHO?'Head Office':'Karigar')+'</span>';
         var rowsHtml = isHO
           ? row('📁 Project',b.projectName||'—')+row('🚪 Room',b.room||'—')+row('🪑 Seating Setup',b.seatingSetup||'—')+row('👥 Attendees',b.attendees||'—')+row('📝 Remarks',b.purpose||'None')+row('📋 Requirements',escapeHtml(b.additionalRequirements||'None'))+(b.budgetApproval?row('💰 Budget Approval',b.budgetApproval):'')+row('📅 Date',b.date)+row('🕐 From',b.time||'—')+row('🕔 To',b.endTime||'—')
@@ -1745,7 +1749,7 @@ async function checkStatus(){
           +'<div class="stmsg '+mc+'">'+mt+'</div>'
           +(showRebook?'<div style="margin-top:12px"><button class="btn btn-p" style="font-size:.82rem;padding:9px 16px;width:auto" onclick="showSection(\'book\',document.getElementById(\'ai-book\'))">📅 Book a New Session</button></div>':'')
           +(showReschedule?rescheduleBlock(b):'')
-          +(showBudgetUpdate?budgetUpdateBlock(b):'')
+          +(showBudgetUpdate?budgetUpdateBlock(b,needsBudgetBackfill):'')
           +'</div>';
       }).join('');
     } else {
@@ -1781,22 +1785,29 @@ function onRescheduleStartChange(bookingId){
 // and optionally attach/replace the supporting document.
 var BUDGET_UPDATE_MAX_BYTES = 5 * 1024 * 1024; // 5 MB, same cap as booking time
 
-function budgetUpdateBlock(booking){
-  return '<div class="reschedule-box"><h4>💰 Budget now approved?</h4>'
+function budgetUpdateBlock(booking,isBackfill){
+  var heading = isBackfill ? '📎 Attach your budget approval document' : '💰 Budget now approved?';
+  var intro = isBackfill
+    ? 'Your budget approval document didn\'t save correctly earlier - please re-attach it below.'
+    : 'Let the catering team know your budget has been approved since booking.';
+  var buttonLabel = isBackfill ? '📎 Attach Document' : '✅ Confirm Budget Approved';
+  return '<div class="reschedule-box"><h4>'+heading+'</h4>'
     +'<div class="reschedule-form">'
-    +'<div style="font-size:.78rem;color:#78716c;margin-bottom:10px">Let the catering team know your budget has been approved since booking.</div>'
+    +'<div style="font-size:.78rem;color:#78716c;margin-bottom:10px">'+intro+'</div>'
     +'<div class="fg"><label>Attach Supporting Document <span class="form-section-opt" style="color:#c0392b">(Required)</span></label>'
     +'<input type="file" id="bu-file-'+booking.id+'" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"/></div>'
-    +'<button class="btn-accent" id="bu-btn-'+booking.id+'" onclick="submitBudgetUpdate(\''+booking.id+'\')">✅ Confirm Budget Approved</button>'
+    +'<button class="btn-accent" id="bu-btn-'+booking.id+'" onclick="submitBudgetUpdate(\''+booking.id+'\','+(isBackfill?'true':'false')+')">'+buttonLabel+'</button>'
     +'<div id="bu-msg-'+booking.id+'" style="margin-top:8px"></div>'
     +'</div></div>';
 }
 
-async function submitBudgetUpdate(bookingId){
+async function submitBudgetUpdate(bookingId,isBackfill){
   var fileInput=document.getElementById('bu-file-'+bookingId);
   var btn=document.getElementById('bu-btn-'+bookingId);
   var msgEl=document.getElementById('bu-msg-'+bookingId);
   var file=fileInput&&fileInput.files&&fileInput.files[0];
+  var busyLabel = isBackfill ? '⏳ Uploading…' : '⏳ Updating…';
+  var idleLabel = isBackfill ? '📎 Attach Document' : '✅ Confirm Budget Approved';
 
   if(!file){
     msgEl.innerHTML='<div class="msg msg-err">Please attach the supporting document to confirm budget approval.</div>';
@@ -1808,7 +1819,7 @@ async function submitBudgetUpdate(bookingId){
     return;
   }
 
-  btn.disabled=true; btn.textContent='⏳ Updating…';
+  btn.disabled=true; btn.textContent=busyLabel;
   msgEl.innerHTML='';
 
   var payload={action:'updateBudgetHO',bookingId:bookingId,budgetApproval:'Yes'};
@@ -1826,20 +1837,22 @@ async function submitBudgetUpdate(bookingId){
       payload.budgetAttachmentBase64=base64;
     }catch(readErr){
       msgEl.innerHTML='<div class="msg msg-err">Could not read that file — please try a different one.</div>';
-      btn.disabled=false; btn.textContent='✅ Confirm Budget Approved';
+      btn.disabled=false; btn.textContent=idleLabel;
       return;
     }
   }
 
   var data=await apiPost(payload);
   if(data&&data.success){
-    msgEl.innerHTML='<div class="msg msg-ok">✅ Thanks — the catering team has been notified.</div>';
+    msgEl.innerHTML=isBackfill
+      ? '<div class="msg msg-ok">✅ Thanks — your document has been saved.</div>'
+      : '<div class="msg msg-ok">✅ Thanks — the catering team has been notified.</div>';
     btn.disabled=true;
     if(fileInput) fileInput.disabled=true;
     await checkStatus();
   } else {
     msgEl.innerHTML='<div class="msg msg-err">⚠️ '+(data&&data.error?data.error:'Could not update — please try again.')+'</div>';
-    btn.disabled=false; btn.textContent='✅ Confirm Budget Approved';
+    btn.disabled=false; btn.textContent=idleLabel;
   }
 }
 
