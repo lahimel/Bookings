@@ -1066,6 +1066,16 @@ textarea{min-height:96px;resize:vertical}
               <option value="No">No</option>
             </select>
             <div style="font-size:.71rem;color:var(--muted);margin-top:6px">Required since Lunch / Hi-Tea is requested.</div>
+            <div style="margin-top:12px">
+              <label for="f-budget-attachment">Attach Supporting Document <span class="form-section-opt">(Optional)</span></label>
+              <input type="file" id="f-budget-attachment" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onchange="onBudgetAttachmentChange(this)"/>
+              <div id="budget-attachment-info" class="hidden" style="font-size:.75rem;color:var(--text);margin-top:6px;display:flex;align-items:center;gap:8px">
+                <span id="budget-attachment-filename"></span>
+                <button type="button" onclick="clearBudgetAttachment()" style="width:auto;padding:2px 9px;border:1px solid var(--border);border-radius:6px;background:white;font-size:.7rem;cursor:pointer;color:var(--muted)">✕ Remove</button>
+              </div>
+              <div id="budget-attachment-err" class="hidden" style="font-size:.71rem;color:#c0392b;margin-top:6px"></div>
+              <div style="font-size:.71rem;color:var(--muted);margin-top:6px">e.g. a screenshot or copy of the budget approval/sanction. Max 5 MB.</div>
+            </div>
           </div>
           <div id="req-wrap-stationery" class="hidden" style="margin-top:8px"><textarea id="req-note-stationery" rows="2" placeholder="Details for Stationery…"                style="resize:vertical;min-height:64px"></textarea></div>
           <div id="req-wrap-tv"         class="hidden" style="margin-top:8px"><textarea id="req-note-tv"         rows="2" placeholder="Details for TV / Projector…"            style="resize:vertical;min-height:64px"></textarea></div>
@@ -1599,6 +1609,7 @@ function getSeatingValue(){
 function buildSummary(){
   var budgetVal=v('f-budget-approval');
   var budgetRow = budgetVal ? row('💰 Budget Approval',budgetVal) : '';
+  var attachmentRow = budgetAttachment ? row('📎 Attachment',escapeHtml(budgetAttachment.name)) : '';
   var html = bookingLocation==='ho'
     ? row('🏢 Location','<span class="pill pill-p">Head Office</span>')
       + row('📁 Project',v('f-project'))
@@ -1614,6 +1625,7 @@ function buildSummary(){
       + row('📧 Email',v('f-email'))
       + row('📋 Requirements',escapeHtml(getSelectedReqs().join(', ')||'None'))
       + budgetRow
+      + attachmentRow
     : row('⏱ Session Type','<span class="pill pill-p">'+DUR_LBL[selDur]+'</span>')
       + row('📅 Date',selDate.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'long',year:'numeric'}))
       + row('🕐 From','<span class="pill pill-t">'+fmtT(sH,sM,sAP)+'</span>')
@@ -1643,6 +1655,9 @@ async function submitBooking(){
       projectName:v('f-project'),
       seatingSetup:getSeatingValue(),
       budgetApproval:v('f-budget-approval'),
+      budgetAttachmentName:budgetAttachment?budgetAttachment.name:'',
+      budgetAttachmentMimeType:budgetAttachment?budgetAttachment.mimeType:'',
+      budgetAttachmentBase64:budgetAttachment?budgetAttachment.base64:'',
       purpose:v('f-purpose'), attendees:v('f-attendees'),
       additionalRequirements:getSelectedReqs(),
       date:selDate.toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'}),
@@ -1714,6 +1729,11 @@ async function checkStatus(){
         var showReschedule=rescheduleMode&&(b.status==='Pending'||b.status==='Approved');
         // Book Again button: only in My Booking mode, only for Declined/Cancelled
         var showRebook=!rescheduleMode&&(b.status==='Declined'||b.status==='Cancelled');
+        // Update Budget Info: only in My Booking mode, HO bookings with Lunch/Hi-Tea
+        // requested and budget still marked "No" on a live (not declined/cancelled) booking.
+        var reqsStr=String(b.additionalRequirements||'');
+        var showBudgetUpdate=!rescheduleMode&&isHO&&(b.status==='Pending'||b.status==='Approved')
+          &&b.budgetApproval==='No'&&reqsStr.indexOf('Lunch / Hi-Tea')>-1;
         var locTag='<span class="loc-tag '+(isHO?'loc-tag-ho':'loc-tag-karigar')+'">'+(isHO?'Head Office':'Karigar')+'</span>';
         var rowsHtml = isHO
           ? row('📁 Project',b.projectName||'—')+row('🚪 Room',b.room||'—')+row('🪑 Seating Setup',b.seatingSetup||'—')+row('👥 Attendees',b.attendees||'—')+row('📝 Remarks',b.purpose||'None')+row('📋 Requirements',escapeHtml(b.additionalRequirements||'None'))+(b.budgetApproval?row('💰 Budget Approval',b.budgetApproval):'')+row('📅 Date',b.date)+row('🕐 From',b.time||'—')+row('🕔 To',b.endTime||'—')
@@ -1724,6 +1744,7 @@ async function checkStatus(){
           +'<div class="stmsg '+mc+'">'+mt+'</div>'
           +(showRebook?'<div style="margin-top:12px"><button class="btn btn-p" style="font-size:.82rem;padding:9px 16px;width:auto" onclick="showSection(\'book\',document.getElementById(\'ai-book\'))">📅 Book a New Session</button></div>':'')
           +(showReschedule?rescheduleBlock(b):'')
+          +(showBudgetUpdate?budgetUpdateBlock(b):'')
           +'</div>';
       }).join('');
     } else {
@@ -1750,6 +1771,70 @@ function populateRescheduleEndOptions(bookingId, selectedEnd){
 
 function onRescheduleStartChange(bookingId){
   populateRescheduleEndOptions(bookingId, '');
+}
+
+// ─── BUDGET INFO UPDATE (My Booking view) ──────────────────────────────────────
+// Shown on a live HO booking's status card when Lunch/Hi-Tea was requested and
+// Budget Approval is still "No". Lets the requester confirm the budget is now
+// sorted — without touching the meeting's date, time, or approval status —
+// and optionally attach/replace the supporting document.
+var BUDGET_UPDATE_MAX_BYTES = 5 * 1024 * 1024; // 5 MB, same cap as booking time
+
+function budgetUpdateBlock(booking){
+  return '<div class="reschedule-box"><h4>💰 Budget now approved?</h4>'
+    +'<div class="reschedule-form">'
+    +'<div style="font-size:.78rem;color:#78716c;margin-bottom:10px">Let the catering team know your budget has been approved since booking.</div>'
+    +'<div class="fg"><label>Attach Supporting Document <span class="form-section-opt">(Optional)</span></label>'
+    +'<input type="file" id="bu-file-'+booking.id+'" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"/></div>'
+    +'<button class="btn-accent" id="bu-btn-'+booking.id+'" onclick="submitBudgetUpdate(\''+booking.id+'\')">✅ Confirm Budget Approved</button>'
+    +'<div id="bu-msg-'+booking.id+'" style="margin-top:8px"></div>'
+    +'</div></div>';
+}
+
+async function submitBudgetUpdate(bookingId){
+  var fileInput=document.getElementById('bu-file-'+bookingId);
+  var btn=document.getElementById('bu-btn-'+bookingId);
+  var msgEl=document.getElementById('bu-msg-'+bookingId);
+  var file=fileInput&&fileInput.files&&fileInput.files[0];
+
+  if(file&&file.size>BUDGET_UPDATE_MAX_BYTES){
+    msgEl.innerHTML='<div class="msg msg-err">File is too large — please attach something under 5 MB.</div>';
+    return;
+  }
+
+  btn.disabled=true; btn.textContent='⏳ Updating…';
+  msgEl.innerHTML='';
+
+  var payload={action:'updateBudgetHO',bookingId:bookingId,budgetApproval:'Yes'};
+
+  if(file){
+    try{
+      var base64=await new Promise(function(resolve,reject){
+        var reader=new FileReader();
+        reader.onload=function(){ resolve(String(reader.result).split(',')[1]||''); };
+        reader.onerror=reject;
+        reader.readAsDataURL(file);
+      });
+      payload.budgetAttachmentName=file.name;
+      payload.budgetAttachmentMimeType=file.type||'application/octet-stream';
+      payload.budgetAttachmentBase64=base64;
+    }catch(readErr){
+      msgEl.innerHTML='<div class="msg msg-err">Could not read that file — please try a different one.</div>';
+      btn.disabled=false; btn.textContent='✅ Confirm Budget Approved';
+      return;
+    }
+  }
+
+  var data=await apiPost(payload);
+  if(data&&data.success){
+    msgEl.innerHTML='<div class="msg msg-ok">✅ Thanks — the catering team has been notified.</div>';
+    btn.disabled=true;
+    if(fileInput) fileInput.disabled=true;
+    await checkStatus();
+  } else {
+    msgEl.innerHTML='<div class="msg msg-err">⚠️ '+(data&&data.error?data.error:'Could not update — please try again.')+'</div>';
+    btn.disabled=false; btn.textContent='✅ Confirm Budget Approved';
+  }
 }
 
 function rescheduleBlock(booking){
@@ -1850,6 +1935,7 @@ function resetForm(){
   document.getElementById('other-seating-wrap').classList.add('hidden');
   document.getElementById('f-budget-approval').value='';
   document.getElementById('budget-approval-wrap').classList.add('hidden');
+  clearBudgetAttachment();
   ['food','teacoffee','lunchhitea','stationery','tv','wifi','chairs','vc','other'].forEach(function(key){
     var cb = document.getElementById('req-cb-' + key);
     if(cb) cb.checked = false;
@@ -1923,6 +2009,53 @@ function updateBudgetApprovalVisibility(){
   if(!show){
     var sel=document.getElementById('f-budget-approval');
     if(sel) sel.value='';
+    clearBudgetAttachment();
+  }
+}
+
+// ─── BUDGET APPROVAL ATTACHMENT ────────────────────────────────────────────────
+// Holds the file's base64 content + metadata once read, ready to send in the
+// booking payload. Cleared whenever the file input is cleared or the whole
+// Budget Approval section is hidden (e.g. Lunch/Hi-Tea unchecked).
+var budgetAttachment = null; // { name, mimeType, base64 }
+var BUDGET_ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024; // 5 MB
+
+function onBudgetAttachmentChange(input){
+  var err = document.getElementById('budget-attachment-err');
+  err.classList.add('hidden');
+  var file = input.files && input.files[0];
+  if(!file) { clearBudgetAttachment(); return; }
+
+  if(file.size > BUDGET_ATTACHMENT_MAX_BYTES){
+    showEl(err, 'File is too large — please attach something under 5 MB.');
+    input.value = '';
+    clearBudgetAttachment(false);
+    return;
+  }
+
+  var reader = new FileReader();
+  reader.onload = function(){
+    // reader.result is a data URL like "data:<mime>;base64,<data>" — we only
+    // need the part after the comma to send to the backend.
+    var base64 = String(reader.result).split(',')[1] || '';
+    budgetAttachment = { name: file.name, mimeType: file.type || 'application/octet-stream', base64: base64 };
+    document.getElementById('budget-attachment-filename').textContent = '📎 ' + file.name;
+    document.getElementById('budget-attachment-info').classList.remove('hidden');
+  };
+  reader.onerror = function(){
+    showEl(err, 'Could not read that file — please try a different one.');
+    clearBudgetAttachment();
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearBudgetAttachment(resetInput){
+  budgetAttachment = null;
+  document.getElementById('budget-attachment-info').classList.add('hidden');
+  document.getElementById('budget-attachment-filename').textContent = '';
+  if(resetInput !== false){
+    var input = document.getElementById('f-budget-attachment');
+    if(input) input.value = '';
   }
 }
 
