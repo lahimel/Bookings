@@ -1060,14 +1060,14 @@ textarea{min-height:96px;resize:vertical}
           <div id="req-wrap-lunchhitea" class="hidden" style="margin-top:8px"><textarea id="req-note-lunchhitea" rows="2" placeholder="Details for Lunch / Hi-Tea…"              style="resize:vertical;min-height:64px"></textarea></div>
           <div id="budget-approval-wrap" class="hidden" style="margin-top:8px">
             <label>Budget Approval *</label>
-            <select id="f-budget-approval">
+            <select id="f-budget-approval" onchange="onBudgetApprovalChange()">
               <option value="">— Select —</option>
               <option value="Yes">Yes</option>
               <option value="No">No</option>
             </select>
             <div style="font-size:.71rem;color:var(--muted);margin-top:6px">Required since Lunch / Hi-Tea is requested.</div>
             <div style="margin-top:12px">
-              <label for="f-budget-attachment">Attach Supporting Document <span class="form-section-opt">(Optional)</span></label>
+              <label for="f-budget-attachment">Attach Supporting Document <span class="form-section-opt" id="budget-attachment-optional-tag">(Optional)</span></label>
               <input type="file" id="f-budget-attachment" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onchange="onBudgetAttachmentChange(this)"/>
               <div id="budget-attachment-info" class="hidden" style="font-size:.75rem;color:var(--text);margin-top:6px;display:flex;align-items:center;gap:8px">
                 <span id="budget-attachment-filename"></span>
@@ -1315,6 +1315,7 @@ function goStep(n){
       if(v('f-seating')==='Other' && !v('f-seating-other')){showEl(err,'Please specify your "Other" seating setup.');return;}
       var lunchCb=document.getElementById('req-cb-lunchhitea');
       if(lunchCb && lunchCb.checked && !v('f-budget-approval')){showEl(err,'Please indicate whether budget approval has been obtained for Lunch / Hi-Tea.');return;}
+      if(lunchCb && lunchCb.checked && v('f-budget-approval')==='Yes' && !budgetAttachment){showEl(err,'Please attach the supporting document, since Budget Approval is marked as Yes.');return;}
     } else {
       var type=v('f-type'),details=v('f-work-details'),labs=getSelectedLabs();
       if(!nm||!ph||!em||!type||!details||!labs.length){showEl(err,'Please fill in all required fields, including at least one lab.');return;}
@@ -1784,7 +1785,7 @@ function budgetUpdateBlock(booking){
   return '<div class="reschedule-box"><h4>💰 Budget now approved?</h4>'
     +'<div class="reschedule-form">'
     +'<div style="font-size:.78rem;color:#78716c;margin-bottom:10px">Let the catering team know your budget has been approved since booking.</div>'
-    +'<div class="fg"><label>Attach Supporting Document <span class="form-section-opt">(Optional)</span></label>'
+    +'<div class="fg"><label>Attach Supporting Document <span class="form-section-opt" style="color:#c0392b">(Required)</span></label>'
     +'<input type="file" id="bu-file-'+booking.id+'" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"/></div>'
     +'<button class="btn-accent" id="bu-btn-'+booking.id+'" onclick="submitBudgetUpdate(\''+booking.id+'\')">✅ Confirm Budget Approved</button>'
     +'<div id="bu-msg-'+booking.id+'" style="margin-top:8px"></div>'
@@ -1797,7 +1798,12 @@ async function submitBudgetUpdate(bookingId){
   var msgEl=document.getElementById('bu-msg-'+bookingId);
   var file=fileInput&&fileInput.files&&fileInput.files[0];
 
-  if(file&&file.size>BUDGET_UPDATE_MAX_BYTES){
+  if(!file){
+    msgEl.innerHTML='<div class="msg msg-err">Please attach the supporting document to confirm budget approval.</div>';
+    return;
+  }
+
+  if(file.size>BUDGET_UPDATE_MAX_BYTES){
     msgEl.innerHTML='<div class="msg msg-err">File is too large — please attach something under 5 MB.</div>';
     return;
   }
@@ -1936,6 +1942,7 @@ function resetForm(){
   document.getElementById('f-budget-approval').value='';
   document.getElementById('budget-approval-wrap').classList.add('hidden');
   clearBudgetAttachment();
+  onBudgetApprovalChange();
   ['food','teacoffee','lunchhitea','stationery','tv','wifi','chairs','vc','other'].forEach(function(key){
     var cb = document.getElementById('req-cb-' + key);
     if(cb) cb.checked = false;
@@ -2010,6 +2017,7 @@ function updateBudgetApprovalVisibility(){
     var sel=document.getElementById('f-budget-approval');
     if(sel) sel.value='';
     clearBudgetAttachment();
+    onBudgetApprovalChange();
   }
 }
 
@@ -2019,6 +2027,21 @@ function updateBudgetApprovalVisibility(){
 // Budget Approval section is hidden (e.g. Lunch/Hi-Tea unchecked).
 var budgetAttachment = null; // { name, mimeType, base64 }
 var BUDGET_ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024; // 5 MB
+
+// Attachment is optional when Budget Approval is "No" (catering team decides
+// separately via the gated email), but required as proof once the requester
+// claims budget IS approved ("Yes").
+function onBudgetApprovalChange(){
+  var tag=document.getElementById('budget-attachment-optional-tag');
+  if(!tag) return;
+  if(v('f-budget-approval')==='Yes'){
+    tag.textContent='(Required)';
+    tag.style.color='#c0392b';
+  } else {
+    tag.textContent='(Optional)';
+    tag.style.color='';
+  }
+}
 
 function onBudgetAttachmentChange(input){
   var err = document.getElementById('budget-attachment-err');
