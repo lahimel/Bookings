@@ -530,6 +530,33 @@ body{
 
 /* ─── FORM ────────────────────────────────────────────────── */
 .fg{margin-bottom:16px}
+.attendee-search-wrap{position:relative}
+.attendee-search-results{
+  position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:20;
+  background:var(--surface);border:1.5px solid var(--border);border-radius:9px;
+  box-shadow:var(--shadow-md);max-height:220px;overflow-y:auto;
+}
+.attendee-search-results.hidden{display:none}
+.attendee-result{
+  padding:9px 14px;cursor:pointer;font-size:.85rem;
+  border-bottom:1px solid var(--border);
+}
+.attendee-result:last-child{border-bottom:none}
+.attendee-result:hover{background:var(--primary-light)}
+.attendee-result-name{font-weight:600;color:var(--text)}
+.attendee-result-email{color:var(--muted);font-size:.76rem}
+.attendee-result-empty{padding:10px 14px;font-size:.8rem;color:var(--muted)}
+.attendee-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.attendee-chip{
+  display:inline-flex;align-items:center;gap:7px;
+  background:var(--primary-light);border:1px solid var(--border);
+  border-radius:999px;padding:6px 8px 6px 12px;font-size:.8rem;color:var(--text);
+}
+.attendee-chip button{
+  border:none;background:transparent;color:var(--muted);cursor:pointer;
+  font-size:1rem;line-height:1;padding:2px 4px;width:auto;
+}
+.attendee-chip button:hover{color:var(--red)}
 label{
   display:block;font-size:.77rem;font-weight:600;
   color:#574F4A;margin-bottom:6px;letter-spacing:.01em;
@@ -1034,6 +1061,15 @@ textarea{min-height:96px;resize:vertical}
           <div class="fg">
             <label>Number of Attendees *</label>
             <input id="f-attendees" type="number" min="1" placeholder="e.g. 6"/>
+          </div>
+          <div class="fg">
+            <label>Meeting Attendees <span class="form-section-opt">(Optional)</span></label>
+            <div class="attendee-search-wrap">
+              <input id="f-attendee-search" type="text" autocomplete="off" placeholder="Search colleagues by name or email…" oninput="onAttendeeSearchInput()"/>
+              <div id="attendee-search-results" class="attendee-search-results hidden"></div>
+            </div>
+            <div style="font-size:.71rem;color:var(--muted);margin-top:6px">Anyone added here will get a Google Calendar invite once the meeting is approved.</div>
+            <div id="attendee-chips" class="attendee-chips"></div>
           </div>
           <div class="fg">
             <label>Any Remarks</label>
@@ -1620,6 +1656,7 @@ function buildSummary(){
       + row('🕐 From','<span class="pill pill-t">'+fmtT(sH,sM,sAP)+'</span>')
       + row('🕔 To','<span class="pill pill-t">'+fmtT(eH,eM,eAP)+'</span>')
       + row('👥 Attendees',escapeHtml(v('f-attendees')))
+      + (selectedAttendees.length ? row('🙋 Named Attendees',selectedAttendees.map(function(p){return escapeHtml(p.name||p.email);}).join(', ')) : '')
       + row('📝 Remarks',escapeHtml(v('f-purpose')||'None'))
       + row('👤 Name',v('f-name'))
       + row('📞 Phone',v('f-phone'))
@@ -1660,6 +1697,7 @@ async function submitBooking(){
       budgetAttachmentMimeType:budgetAttachment?budgetAttachment.mimeType:'',
       budgetAttachmentBase64:budgetAttachment?budgetAttachment.base64:'',
       purpose:v('f-purpose'), attendees:v('f-attendees'),
+      namedAttendees:selectedAttendees,
       additionalRequirements:getSelectedReqs(),
       date:selDate.toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'}),
       dateKey:toKey(selDate),
@@ -1741,7 +1779,7 @@ async function checkStatus(){
           &&reqsStr.indexOf('Lunch / Hi-Tea')>-1&&(b.budgetApproval==='No'||needsBudgetBackfill);
         var locTag='<span class="loc-tag '+(isHO?'loc-tag-ho':'loc-tag-karigar')+'">'+(isHO?'Head Office':'Karigar')+'</span>';
         var rowsHtml = isHO
-          ? row('📁 Project',b.projectName||'—')+row('🚪 Room',b.room||'—')+row('🪑 Seating Setup',b.seatingSetup||'—')+row('👥 Attendees',b.attendees||'—')+row('📝 Remarks',b.purpose||'None')+row('📋 Requirements',escapeHtml(b.additionalRequirements||'None'))+(b.budgetApproval?row('💰 Budget Approval',b.budgetApproval):'')+row('📅 Date',b.date)+row('🕐 From',b.time||'—')+row('🕔 To',b.endTime||'—')
+          ? row('📁 Project',b.projectName||'—')+row('🚪 Room',b.room||'—')+row('🪑 Seating Setup',b.seatingSetup||'—')+row('👥 Attendees',b.attendees||'—')+((b.namedAttendees&&b.namedAttendees.length)?row('🙋 Named Attendees',b.namedAttendees.map(function(p){return escapeHtml(p.name||p.email);}).join(', ')):'')+row('📝 Remarks',b.purpose||'None')+row('📋 Requirements',escapeHtml(b.additionalRequirements||'None'))+(b.budgetApproval?row('💰 Budget Approval',b.budgetApproval):'')+row('📅 Date',b.date)+row('🕐 From',b.time||'—')+row('🕔 To',b.endTime||'—')
           : row('⏱ Session Type',b.duration||'—')+row('🏷 Type of Work',b.typeOfWork||b.service||'—')+row('🏫 Labs',b.labs||'—')+row('📝 Details',b.workDetails||'—')+row('📋 Requirements',escapeHtml(b.additionalRequirements||'None'))+row('📅 Date',b.date)+row('🕐 From',b.time||'—')+row('🕔 To',b.endTime||'—');
         return '<div class="stcard">'
           +'<div class="stcard-head"><strong>'+locTag+(isHO?(b.room||'Meeting'):(b.typeOfWork||b.service||'—'))+'</strong><span class="stb stb-'+b.status+'">'+b.status+'</span></div>'
@@ -1956,6 +1994,7 @@ function resetForm(){
   document.getElementById('budget-approval-wrap').classList.add('hidden');
   clearBudgetAttachment();
   onBudgetApprovalChange();
+  clearSelectedAttendees();
   ['food','teacoffee','lunchhitea','stationery','tv','wifi','chairs','vc','other'].forEach(function(key){
     var cb = document.getElementById('req-cb-' + key);
     if(cb) cb.checked = false;
@@ -2093,6 +2132,99 @@ function clearBudgetAttachment(resetInput){
     var input = document.getElementById('f-budget-attachment');
     if(input) input.value = '';
   }
+}
+
+// ─── MEETING ATTENDEES (org directory picker) ──────────────────────────────────
+// Selected people get added as Calendar guests once the meeting is approved
+// (handled server-side). This is separate from the plain headcount field.
+var selectedAttendees = []; // [{name, email}]
+var attendeeSearchTimer = null;
+
+function onAttendeeSearchInput(){
+  var input = document.getElementById('f-attendee-search');
+  var resultsEl = document.getElementById('attendee-search-results');
+  var q = input.value.trim();
+
+  clearTimeout(attendeeSearchTimer);
+  if(q.length < 2){
+    resultsEl.classList.add('hidden');
+    resultsEl.innerHTML = '';
+    return;
+  }
+
+  // Debounced so we're not firing a request on every keystroke.
+  attendeeSearchTimer = setTimeout(async function(){
+    resultsEl.classList.remove('hidden');
+    resultsEl.innerHTML = '<div class="attendee-result-empty">Searching…</div>';
+    var data = await apiGetQuery('searchDirectory', 'query=' + encodeURIComponent(q));
+    // The search box may have been cleared or changed while the request was
+    // in flight — only render if it's still relevant.
+    if(document.getElementById('f-attendee-search').value.trim() !== q) return;
+
+    if(!data || !data.success){
+      resultsEl.innerHTML = '<div class="attendee-result-empty">Could not search right now — please try again.</div>';
+      return;
+    }
+    var people = (data.people || []).filter(function(p){
+      return !selectedAttendees.some(function(s){ return s.email === p.email; });
+    });
+    if(!people.length){
+      resultsEl.innerHTML = '<div class="attendee-result-empty">No matches found.</div>';
+      return;
+    }
+    resultsEl.innerHTML = people.map(function(p, idx){
+      return '<div class="attendee-result" onclick="addAttendeeFromSearch(' + idx + ')">'
+        + '<div class="attendee-result-name">' + escapeHtml(p.name || p.email) + '</div>'
+        + (p.name ? '<div class="attendee-result-email">' + escapeHtml(p.email) + '</div>' : '')
+        + '</div>';
+    }).join('');
+    // Stashed so the onclick handler above can reference by index without
+    // re-escaping/re-fetching.
+    window.__attendeeSearchResults = people;
+  }, 300);
+}
+
+function addAttendeeFromSearch(idx){
+  var people = window.__attendeeSearchResults || [];
+  var person = people[idx];
+  if(!person) return;
+  addAttendee(person);
+}
+
+function addAttendee(person){
+  if(!person || !person.email) return;
+  if(selectedAttendees.some(function(s){ return s.email === person.email; })) return;
+  selectedAttendees.push({ name: person.name || '', email: person.email });
+  renderAttendeeChips();
+
+  var input = document.getElementById('f-attendee-search');
+  var resultsEl = document.getElementById('attendee-search-results');
+  input.value = '';
+  resultsEl.classList.add('hidden');
+  resultsEl.innerHTML = '';
+}
+
+function removeAttendee(email){
+  selectedAttendees = selectedAttendees.filter(function(p){ return p.email !== email; });
+  renderAttendeeChips();
+}
+
+function renderAttendeeChips(){
+  var chipsEl = document.getElementById('attendee-chips');
+  if(!chipsEl) return;
+  chipsEl.innerHTML = selectedAttendees.map(function(p){
+    return '<span class="attendee-chip">' + escapeHtml(p.name || p.email)
+      + '<button type="button" onclick="removeAttendee(\'' + p.email.replace(/'/g,"\\'") + '\')" aria-label="Remove">×</button></span>';
+  }).join('');
+}
+
+function clearSelectedAttendees(){
+  selectedAttendees = [];
+  renderAttendeeChips();
+  var input = document.getElementById('f-attendee-search');
+  var resultsEl = document.getElementById('attendee-search-results');
+  if(input) input.value = '';
+  if(resultsEl){ resultsEl.classList.add('hidden'); resultsEl.innerHTML = ''; }
 }
 
 function getSelectedReqs(){
