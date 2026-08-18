@@ -1063,7 +1063,7 @@ textarea{min-height:96px;resize:vertical}
             <input id="f-attendees" type="number" min="1" placeholder="e.g. 6"/>
           </div>
           <div class="fg">
-            <label>Meeting Attendees <span class="form-section-opt">(Optional)</span></label>
+            <label>Meeting Attendees</label>
             <div class="attendee-search-wrap">
               <input id="f-attendee-search" type="text" autocomplete="off" placeholder="Search colleagues by name or email…" oninput="onAttendeeSearchInput()"/>
               <div id="attendee-search-results" class="attendee-search-results hidden"></div>
@@ -1372,7 +1372,16 @@ function goStep(n){
     if(toMins(sH,sM,sAP)>=toMins(eH,eM,eAP)){
       document.getElementById('time-err').classList.remove('hidden'); return;
     }
+    // Same-day HO bookings are allowed (no minimum lead time), but the start
+    // time still needs to be later than right now - Karigar never hits this
+    // since it always requires several days' lead time regardless.
+    var now=new Date();
+    if(selDate && toKey(selDate)===toKey(now) && toMins(sH,sM,sAP)<=(now.getHours()*60+now.getMinutes())){
+      document.getElementById('time-err').textContent='⚠️ That time has already passed today. Please choose a later time.';
+      document.getElementById('time-err').classList.remove('hidden'); return;
+    }
     document.getElementById('time-err').classList.add('hidden');
+    document.getElementById('time-err').textContent='⚠️ End time must be after start time';
     document.getElementById('karigar-fields').classList.toggle('hidden', bookingLocation==='ho');
     document.getElementById('ho-fields').classList.toggle('hidden', bookingLocation!=='ho');
   }
@@ -1527,8 +1536,16 @@ function updateTime(){
   document.getElementById('r-end').textContent=fmtT(eH,eM,eAP);
   var diff=toMins(eH,eM,eAP)-toMins(sH,sM,sAP);
   var dur=document.getElementById('r-dur');
+  var now=new Date();
+  var isPastToday = selDate && toKey(selDate)===toKey(now) && toMins(sH,sM,sAP)<=(now.getHours()*60+now.getMinutes());
   if(diff<=0){
     dur.textContent='⚠️'; dur.style.background='#ef4444';
+    document.getElementById('time-err').textContent='⚠️ End time must be after start time';
+    document.getElementById('time-err').classList.remove('hidden');
+    document.getElementById('btn-n3').disabled=true;
+  } else if(isPastToday){
+    dur.textContent='⚠️'; dur.style.background='#ef4444';
+    document.getElementById('time-err').textContent='⚠️ That time has already passed today. Please choose a later time.';
     document.getElementById('time-err').classList.remove('hidden');
     document.getElementById('btn-n3').disabled=true;
   } else {
