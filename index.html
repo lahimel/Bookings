@@ -1068,7 +1068,13 @@ textarea{min-height:96px;resize:vertical}
               <input id="f-attendee-search" type="text" autocomplete="off" placeholder="Search colleagues by name or email…" oninput="onAttendeeSearchInput()"/>
               <div id="attendee-search-results" class="attendee-search-results hidden"></div>
             </div>
-            <div style="font-size:.71rem;color:var(--muted);margin-top:6px">Anyone added here will get a Google Calendar invite once the meeting is approved.</div>
+            <div style="font-size:.71rem;color:var(--muted);margin-top:6px">Anyone added here will get a Google Calendar invite once the meeting is approved. Only people in our org directory show up in search — <a href="#" onclick="toggleExternalAttendeeForm();return false;" id="external-attendee-toggle">add someone external by email</a> instead.</div>
+            <div id="external-attendee-form" class="hidden" style="margin-top:10px;padding:12px;background:var(--bg);border-radius:9px;border:1px solid var(--border)">
+              <input id="f-external-attendee-name" type="text" placeholder="Name (optional)" style="margin-bottom:8px"/>
+              <input id="f-external-attendee-email" type="email" placeholder="Email address" style="margin-bottom:8px"/>
+              <div id="external-attendee-err" class="hidden" style="font-size:.76rem;color:var(--red);margin-bottom:8px"></div>
+              <button type="button" class="btn-accent" style="width:auto;padding:8px 18px;font-size:.82rem" onclick="addExternalAttendee()">Add Guest</button>
+            </div>
             <div id="attendee-chips" class="attendee-chips"></div>
           </div>
           <div class="fg">
@@ -2225,6 +2231,53 @@ function clearSelectedAttendees(){
   var resultsEl = document.getElementById('attendee-search-results');
   if(input) input.value = '';
   if(resultsEl){ resultsEl.classList.add('hidden'); resultsEl.innerHTML = ''; }
+  hideExternalAttendeeForm();
+}
+
+function toggleExternalAttendeeForm(){
+  var form = document.getElementById('external-attendee-form');
+  if(!form) return;
+  if(form.classList.contains('hidden')){
+    form.classList.remove('hidden');
+    document.getElementById('f-external-attendee-email').focus();
+  } else {
+    hideExternalAttendeeForm();
+  }
+}
+
+function hideExternalAttendeeForm(){
+  var form = document.getElementById('external-attendee-form');
+  if(!form) return;
+  form.classList.add('hidden');
+  document.getElementById('f-external-attendee-name').value = '';
+  document.getElementById('f-external-attendee-email').value = '';
+  document.getElementById('external-attendee-err').classList.add('hidden');
+}
+
+function addExternalAttendee(){
+  var nameEl = document.getElementById('f-external-attendee-name');
+  var emailEl = document.getElementById('f-external-attendee-email');
+  var errEl = document.getElementById('external-attendee-err');
+  var name = nameEl.value.trim();
+  var email = emailEl.value.trim().toLowerCase();
+
+  errEl.classList.add('hidden');
+
+  // Simple sanity check, not full RFC validation — the backend already
+  // filters out anything without an "@" too.
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){
+    errEl.textContent = 'Please enter a valid email address.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+  if(selectedAttendees.some(function(p){ return p.email === email; })){
+    errEl.textContent = 'That person has already been added.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+
+  addAttendee({ name: name, email: email });
+  hideExternalAttendeeForm();
 }
 
 function getSelectedReqs(){
