@@ -1199,7 +1199,9 @@ const ROOMS = [
   { id:'Meeting Room 2',    floor:'2nd Floor', location:'First room on the left after entering from the entrance', capacity:4 },
   { id:'Meeting Room 3',    floor:'3rd Floor', location:'First room on the right after entering from the entrance',capacity:4 },
   { id:'Conference Room 1', floor:'1st Floor', location:'Last room on the first floor',                            capacity:9 },
-  { id:'Conference Room 2', floor:'2nd Floor', location:'Straight ahead from the entrance on the second floor',    capacity:8 }
+  { id:'Conference Room 2', floor:'2nd Floor', location:'Straight ahead from the entrance on the second floor',    capacity:8 },
+  { id:'Training Hall Partial', floor:'1st Floor', location:'',                                                    capacity:'12-18' },
+  { id:'Training Hall Full',    floor:'1st Floor', location:'',                                                    capacity:'40-50' }
 ];
 
 function SCRIPT_URL(){return BACKEND_SCRIPT_URL;}
@@ -1310,9 +1312,10 @@ function renderRooms(){
   var wrap=document.getElementById('room-grid');
   wrap.innerHTML = ROOMS.map(function(r){
     var sel = selRoom===r.id ? ' selected' : '';
+    var locLine = r.location ? (r.floor+' · '+r.location) : r.floor;
     return '<div class="dur-card'+sel+'" onclick="pickRoom(\''+r.id.replace(/'/g,"\\'")+'\',this)">'
       +'<div class="di">🚪</div><div class="dt">'+r.id+'</div>'
-      +'<div class="dd">'+r.floor+' · '+r.location+'<br>Capacity: ~'+r.capacity+' people</div>'
+      +'<div class="dd">'+locLine+'<br>Capacity: ~'+r.capacity+' people</div>'
       +'</div>';
   }).join('');
 }
