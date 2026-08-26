@@ -361,7 +361,7 @@ body{
   padding:10px 14px;
   border:1.5px solid #E8C5B8;
   border-radius:9px;
-  font-size:.9rem;
+  font-size:16px;
   font-family:inherit;
   color:var(--text);
   background:white;
@@ -497,7 +497,7 @@ body{
   appearance:none;-webkit-appearance:none;
   width:100%;padding:11px 30px 11px 13px;
   border:1.5px solid var(--border);border-radius:9px;
-  font-size:.9rem;font-family:inherit;color:var(--text);
+  font-size:16px;font-family:inherit;color:var(--text);
   background:white;cursor:pointer;outline:none;
   transition:border .2s,box-shadow .2s;
 }
@@ -563,7 +563,7 @@ label{
 }
 input,select,textarea{
   width:100%;padding:10px 14px;border:1.5px solid var(--border);
-  border-radius:9px;font-size:.89rem;outline:none;
+  border-radius:9px;font-size:16px;outline:none;
   transition:border .2s,box-shadow .2s;font-family:inherit;
   color:var(--text);background:white;
 }
@@ -1968,7 +1968,7 @@ async function checkStatus(){
         var mc=b.status==='Approved'?'sm-a':b.status==='Declined'||b.status==='Cancelled'?'sm-d':'sm-p';
         var isHO=b.location==='Head Office';
         var mt=b.status==='Approved'?(isHO?'✅ Confirmed! The room is reserved for your meeting.':'✅ Confirmed! The Karigar team will be ready at your start time.')
-          :b.status==='Declined'?'❌ This booking was not approved.'
+          :b.status==='Declined'?(isHO&&b.declineReason?'❌ Not approved — '+escapeHtml(b.declineReason):'❌ This booking was not approved.')
           :b.status==='Cancelled'?'🚫 This booking was cancelled.'
           :'⏳ Pending review — you\'ll be notified once confirmed.';
         // Reschedule form: only in reschedule mode, only for Pending/Approved —
