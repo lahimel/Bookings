@@ -888,7 +888,6 @@ textarea{min-height:96px;resize:vertical}
         <div class="ttl">Which room do you need?</div>
         <div class="sub">Pick one room. Capacity is approximate — check with admin if you're close to the limit.</div>
         <div class="dur-grid room-grid" id="room-grid"></div>
-        <button class="btn btn-p" id="btn-n1-ho" onclick="goStep(2)" disabled>Next: Pick a Date →</button>
         <button class="btn btn-s" style="width:100%;margin-top:10px" onclick="backToLocationChoice()">← Change Location</button>
       </div>
 
@@ -897,7 +896,8 @@ textarea{min-height:96px;resize:vertical}
         <div class="ttl">Choose a Date</div>
         <div class="sub" id="dur-remind"></div>
 
-        <!-- Live Calendar Embed — Karigar only for now; no HO calendar exists yet -->
+        <!-- Live Calendar Embed — swaps between the Karigar and HO public
+             calendars via buildCalEmbedUrl(), based on bookingLocation -->
         <div class="cal-wrap" id="cal-wrap">
           <div class="cal-head">
             <span>📅 Karigar Bookings Calendar</span>
@@ -1256,6 +1256,20 @@ function startAutoRefresh(){
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
 var curStep=0, selDur=null, selDate=null, selEndDate=null, calBk={};
+
+// ─── BROWSER HISTORY (Back/Forward button support) ─────────────────────────────
+// The wizard never changes the URL, so by default the browser's Back button
+// has nothing of ours to step through — it just leaves the site entirely.
+// This mirrors the in-page ← Back buttons: every real step/section change
+// pushes a history entry, and popstate (Back/Forward) re-renders by calling
+// the exact same functions the on-screen buttons use, so behavior is
+// identical either way. __suppressHistoryPush prevents that replay from
+// pushing yet another entry on top of the one being restored.
+var __suppressHistoryPush = false;
+function pushNavState(state){
+  if (__suppressHistoryPush) return;
+  try { history.pushState(state, '', location.pathname); } catch(e) { /* ignore */ }
+}
 var bookingLocation=null; // 'karigar' | 'ho'
 var selRoom=null;
 var sH=9,sM=0,sAP='AM',eH=5,eM=0,eAP='PM';
@@ -1323,6 +1337,7 @@ function pickLocation(loc, el){
     s.classList.remove('active','done');
     if(i===1) s.classList.add('active');
   });
+  pushNavState({view:'book', step:1});
 }
 
 function renderRooms(){
@@ -1340,7 +1355,6 @@ function pickRoom(roomId, el){
   selRoom = roomId;
   document.querySelectorAll('#room-grid .dur-card').forEach(function(c){c.classList.remove('selected');});
   el.classList.add('selected');
-  document.getElementById('btn-n1-ho').disabled=false;
   var disp=document.getElementById('f-room-display');
   if(disp) disp.value=roomId;
 
@@ -1359,11 +1373,11 @@ function backToLocationChoice(){
   document.getElementById('steps-indicator').classList.add('hidden');
   document.getElementById('step-0').classList.remove('hidden');
   document.querySelectorAll('#step-0 .dur-card, #step-1 .dur-card, #room-grid .dur-card').forEach(function(c){c.classList.remove('selected');});
-  bookingLocation=null; selDur=null; selRoom=null; curStep=0;
+  bookingLocation=null; selDur=null; selRoom=null; selDate=null; selEndDate=null; curStep=0;
   document.getElementById('btn-n1').disabled=true;
-  document.getElementById('btn-n1-ho').disabled=true;
   [1,2,3,4,5].forEach(function(i){var s=document.getElementById('si-'+i);if(s)s.classList.remove('active','done');});
   document.getElementById('si-1').classList.add('active');
+  pushNavState({view:'book', step:0});
 }
 
 // ─── STEP 1 (Karigar) ─────────────────────────────────────────────────────────
@@ -1425,6 +1439,7 @@ function goStep(n){
     if(i===n) s.classList.add('active');
   });
   curStep=n;
+  pushNavState({view:'book', step:n});
   if(n===2) initStep2();
   if(n===3) setupTime();
   // Scroll to top of card so new step content is immediately visible
@@ -1441,7 +1456,6 @@ function initStep2(){
   var minDate=minLeadDate(bookingLocation);
   dp.min=toKey(minDate);
   dp.removeAttribute('max');
-  dp.value='';
   var noteEl=document.querySelector('.date-note');
   if(noteEl){
     noteEl.innerHTML = bookingLocation==='ho'
@@ -1449,21 +1463,50 @@ function initStep2(){
       : '⏳ Bookings must be at least <strong>5 days in advance</strong>. Sundays are open.';
     noteEl.style.display = bookingLocation==='ho' ? 'none' : '';
   }
-  hide('date-ok'); hide('date-err');
-  document.getElementById('btn-n2').disabled=true;
-  document.getElementById('day-panel').classList.add('hidden');
-  selDate=null;
-
-  // Multi-day booking is HO-only — reset it fresh every time this step loads.
-  selEndDate=null;
   var mdWrap=document.getElementById('multiday-wrap');
   if(mdWrap) mdWrap.classList.toggle('hidden', bookingLocation!=='ho');
-  var mdCb=document.getElementById('f-multiday');
-  if(mdCb) mdCb.checked=false;
-  document.getElementById('enddate-box').classList.add('hidden');
-  document.getElementById('enddate-picker').value='';
-  hide('enddate-err'); hide('enddate-ok');
 
+  if(selDate){
+    // Re-entering with a date already chosen — this is a *return* to the
+    // step (Back from Time, or the browser Back button replaying the same
+    // transition), not a fresh visit. Restore what was picked instead of
+    // wiping it, so reviewing/adjusting the date doesn't cost the date.
+    dp.value=toKey(selDate);
+    hide('date-err');
+    showEl(document.getElementById('date-ok'), '✅ '+selDate.toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'})+' selected');
+    document.getElementById('btn-n2').disabled=false;
+
+    var mdCb=document.getElementById('f-multiday');
+    var epBox=document.getElementById('enddate-box');
+    var ep=document.getElementById('enddate-picker');
+    if(ep) ep.min=toKey(selDate);
+    if(selEndDate){
+      if(mdCb) mdCb.checked=true;
+      if(epBox) epBox.classList.remove('hidden');
+      if(ep) ep.value=toKey(selEndDate);
+      hide('enddate-err');
+      var spanDays=Math.round((selEndDate.getTime()-selDate.getTime())/86400000)+1;
+      showEl(document.getElementById('enddate-ok'), '✅ Ends '+selEndDate.toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'})+' ('+spanDays+' day'+(spanDays>1?'s':'')+')');
+    } else {
+      if(mdCb) mdCb.checked=false;
+      if(epBox) epBox.classList.add('hidden');
+      if(ep) ep.value='';
+      hide('enddate-err'); hide('enddate-ok');
+    }
+  } else {
+    // First real visit to this step for this booking — start from scratch.
+    dp.value='';
+    hide('date-ok'); hide('date-err');
+    document.getElementById('btn-n2').disabled=true;
+    selEndDate=null;
+    var mdCb2=document.getElementById('f-multiday');
+    if(mdCb2) mdCb2.checked=false;
+    document.getElementById('enddate-box').classList.add('hidden');
+    document.getElementById('enddate-picker').value='';
+    hide('enddate-err'); hide('enddate-ok');
+  }
+
+  document.getElementById('day-panel').classList.add('hidden'); // loadCalBk() re-shows it if selDate is set
   renderDateTiles();
   loadCalBk();
 }
@@ -1618,8 +1661,9 @@ function showDayPanel(key,date){
   var h='<div class="dp-head"><span>'+ds+'</span><small>'+bks.length+' booking(s)</small></div><div class="dp-body">';
   bks.forEach(function(b){
     var app=b.status==='Approved';
+    var multiDayNote = b.isMultiDay ? ' <span style="color:#a0aec0;font-weight:400">(multi-day)</span>' : '';
     h+='<div class="dp-event"><div class="dp-bar '+(app?'bar-a':'bar-p')+'"></div>'
-      +'<div><div class="dp-name">'+(b.name||'—')+'</div>'
+      +'<div><div class="dp-name">'+(b.name||'—')+multiDayNote+'</div>'
       +'<div class="dp-meta">'+(b.time||'')+'→'+(b.endTime||'?')+' &nbsp;·&nbsp; '+(b.duration||b.room||'')+'</div></div>'
       +'<span class="dp-badge '+(app?'db-a':'db-p')+'">'+b.status+'</span></div>';
   });
@@ -1887,6 +1931,8 @@ async function submitBooking(){
   if(data&&data.success){
     document.getElementById('step-5').classList.add('hidden');
     document.getElementById('step-6').classList.remove('hidden');
+    curStep=6;
+    pushNavState({view:'book', step:6});
     var prefix = bookingLocation==='ho' ? 'HO-' : 'KARIGAR-';
     document.getElementById('bid').textContent=prefix+data.id.substring(0,8).toUpperCase();
     document.getElementById('success-msg').textContent = bookingLocation==='ho'
@@ -1913,7 +1959,8 @@ async function checkStatus(){
   if(data.bookings&&data.bookings.length>0){
     var bookings=data.bookings;
     if(rescheduleMode){
-      // Reschedule mode: only show bookings that can actually be rescheduled (Karigar only, for now)
+      // Reschedule mode: only show bookings that can actually be rescheduled
+      // (Pending or Approved) — applies to both Karigar and Head Office.
       bookings=bookings.filter(function(b){return (b.status==='Pending'||b.status==='Approved');});
     }
     if(bookings.length>0){
@@ -1924,7 +1971,8 @@ async function checkStatus(){
           :b.status==='Declined'?'❌ This booking was not approved.'
           :b.status==='Cancelled'?'🚫 This booking was cancelled.'
           :'⏳ Pending review — you\'ll be notified once confirmed.';
-        // Reschedule form: only in reschedule mode, only for Pending/Approved, Karigar only for now
+        // Reschedule form: only in reschedule mode, only for Pending/Approved —
+        // both Karigar and Head Office (HO includes the multi-day option).
         var showReschedule=rescheduleMode&&(b.status==='Pending'||b.status==='Approved');
         // Book Again button: only in My Booking mode, only for Declined/Cancelled
         var showRebook=!rescheduleMode&&(b.status==='Declined'||b.status==='Cancelled');
@@ -1939,7 +1987,7 @@ async function checkStatus(){
           &&reqsStr.indexOf('Lunch / Hi-Tea')>-1&&(b.budgetApproval==='No'||needsBudgetBackfill);
         var locTag='<span class="loc-tag '+(isHO?'loc-tag-ho':'loc-tag-karigar')+'">'+(isHO?'Head Office':'Karigar')+'</span>';
         var rowsHtml = isHO
-          ? row('📁 Project',b.projectName||'—')+row('🚪 Room',b.room||'—')+row('🪑 Seating Setup',b.seatingSetup||'—')+row('👥 Attendees',b.attendees||'—')+((b.namedAttendees&&b.namedAttendees.length)?row('🙋 Named Attendees',b.namedAttendees.map(function(p){return escapeHtml(p.name||p.email);}).join(', ')):'')+row('📝 Remarks',b.purpose||'None')+row('📋 Requirements',escapeHtml(b.additionalRequirements||'None'))+(b.budgetApproval?row('💰 Budget Approval',b.budgetApproval):'')+row('📅 Date',b.date)+row('🕐 From',b.time||'—')+row('🕔 To',b.endTime||'—')
+          ? row('📁 Project',b.projectName||'—')+row('🚪 Room',b.room||'—')+row('🪑 Seating Setup',b.seatingSetup||'—')+row('👥 Attendees',b.attendees||'—')+((b.namedAttendees&&b.namedAttendees.length)?row('🙋 Named Attendees',b.namedAttendees.map(function(p){return escapeHtml(p.name||p.email);}).join(', ')):'')+row('📝 Remarks',b.purpose||'None')+row('📋 Requirements',escapeHtml(b.additionalRequirements||'None'))+(b.budgetApproval?row('💰 Budget Approval',b.budgetApproval):'')+row('📅 Date',b.dateRange||b.date)+row('🕐 From',b.time||'—')+row('🕔 To',b.endTime||'—')
           : row('⏱ Session Type',b.duration||'—')+row('🏷 Type of Work',b.typeOfWork||b.service||'—')+row('🏫 Labs',b.labs||'—')+row('📝 Details',b.workDetails||'—')+row('📋 Requirements',escapeHtml(b.additionalRequirements||'None'))+row('📅 Date',b.date)+row('🕐 From',b.time||'—')+row('🕔 To',b.endTime||'—');
         return '<div class="stcard">'
           +'<div class="stcard-head"><strong>'+locTag+(isHO?(b.room||'Meeting'):(b.typeOfWork||b.service||'—'))+'</strong><span class="stb stb-'+b.status+'">'+b.status+'</span></div>'
@@ -2228,7 +2276,6 @@ function resetForm(){
   clearSelectedLabs();
   document.querySelectorAll('.dur-card').forEach(function(c){c.classList.remove('selected');});
   document.getElementById('btn-n1').disabled=true;
-  document.getElementById('btn-n1-ho').disabled=true;
   for(var i=1;i<=6;i++){var e=document.getElementById('step-'+i);if(e)e.classList.add('hidden');}
   document.getElementById('step-1-ho').classList.add('hidden');
   document.getElementById('steps-indicator').classList.add('hidden');
@@ -2236,6 +2283,7 @@ function resetForm(){
   [1,2,3,4,5].forEach(function(i){var s=document.getElementById('si-'+i);if(s)s.classList.remove('active','done');});
   document.getElementById('si-1').classList.add('active');
   document.getElementById('day-panel').classList.add('hidden');
+  pushNavState({view:'book', step:0});
 }
 
 // ─── UTILITY HELPERS ──────────────────────────────────────────────────────────
@@ -2569,11 +2617,56 @@ function showSection(which, cardEl) {
   // Reveal the content area
   var cw = document.getElementById('content-wrap');
   cw.classList.remove('hidden');
+
+  // Record this as a Back-button-reachable step. Booking's own step (which
+  // sub-page of the wizard is showing) is tracked separately by curStep and
+  // carried over here, so returning to "Book" via history lands wherever
+  // the person had gotten to, not back at square one.
+  pushNavState(tabKey === 'book'
+    ? {view:'book', step:curStep}
+    : {view:'status', reschedule: which==='reschedule'});
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 updateCalEmbed();
 startAutoRefresh();
+
+// Baseline entry for "Home" (hero + Get Started cards, content-wrap hidden).
+// Uses replaceState, not pushState, so this doesn't add an extra entry on
+// top of the page load itself — pressing Back from Home still correctly
+// leaves the site, exactly as it would with no history handling at all.
+try { history.replaceState({view:'home'}, '', location.pathname); } catch(e) { /* ignore */ }
+
+window.addEventListener('popstate', function(e){
+  __suppressHistoryPush = true;
+  try {
+    var state = e.state;
+    if (!state || state.view === 'home') {
+      // Back to the pristine Home view: hide the revealed section again and
+      // drop the active highlight from whichever "Get Started" card was used.
+      document.querySelectorAll('.action-item').forEach(function(c){ c.classList.remove('ac-active'); });
+      var cw = document.getElementById('content-wrap');
+      if (cw) cw.classList.add('hidden');
+    } else if (state.view === 'status') {
+      var scBtn = document.getElementById(state.reschedule ? 'ai-reschedule' : 'ai-mybooking');
+      showSection(state.reschedule ? 'reschedule' : 'status', scBtn);
+    } else if (state.view === 'book') {
+      var bkBtn = document.getElementById('ai-book');
+      showSection('book', bkBtn);
+      var target = typeof state.step === 'number' ? state.step : 0;
+      if (target !== curStep) {
+        // Step 0 (location choice) is reached via backToLocationChoice(),
+        // not goStep() — goStep only knows how to render steps 1 through 6
+        // and doesn't reset bookingLocation/selRoom/selDur the way arriving
+        // at step 0 should.
+        if (target === 0) backToLocationChoice();
+        else goStep(target);
+      }
+    }
+  } finally {
+    __suppressHistoryPush = false;
+  }
+});
 </script>
 </body>
 </html>
