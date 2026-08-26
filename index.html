@@ -916,6 +916,23 @@ textarea{min-height:96px;resize:vertical}
           <div class="date-note">⏳ Bookings must be at least <strong>5 days in advance</strong>. Sundays are open.</div>
           <div id="date-err" class="msg msg-err hidden"></div>
           <div id="date-ok"  class="msg msg-ok  hidden"></div>
+
+          <!-- Multi-day toggle — Head Office only. A hall can be booked across
+               several consecutive days (e.g. a multi-day training), as long
+               as the range doesn't cross a Sunday (HO is closed that day). -->
+          <div id="multiday-wrap" class="hidden" style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
+            <label style="display:flex;align-items:center;gap:9px;font-size:.85rem;cursor:pointer;color:var(--text)">
+              <input type="checkbox" id="f-multiday" onchange="onMultiDayToggle(this.checked)" style="width:16px;height:16px;accent-color:var(--primary)">
+              This booking spans multiple days
+            </label>
+            <div id="enddate-box" class="hidden" style="margin-top:12px">
+              <div class="date-label">Select end date</div>
+              <input type="date" id="enddate-picker" class="date-input" onchange="onEndDatePick(this.value)"/>
+              <div class="date-note">Ranges can't cross a Sunday (Head Office is closed) and are limited to 14 days.</div>
+              <div id="enddate-err" class="msg msg-err hidden"></div>
+              <div id="enddate-ok"  class="msg msg-ok  hidden"></div>
+            </div>
+          </div>
         </div>
 
         <!-- Day bookings panel -->
@@ -1238,7 +1255,7 @@ function startAutoRefresh(){
 }
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
-var curStep=0, selDur=null, selDate=null, calBk={};
+var curStep=0, selDur=null, selDate=null, selEndDate=null, calBk={};
 var bookingLocation=null; // 'karigar' | 'ho'
 var selRoom=null;
 var sH=9,sM=0,sAP='AM',eH=5,eM=0,eAP='PM';
@@ -1326,6 +1343,14 @@ function pickRoom(roomId, el){
   document.getElementById('btn-n1-ho').disabled=false;
   var disp=document.getElementById('f-room-display');
   if(disp) disp.value=roomId;
+
+  // Auto-advance: every room's floor/capacity is already visible side-by-side,
+  // so there's nothing left to decide once one is tapped — no need to make
+  // the person click "Next" separately. The short delay lets the selection
+  // highlight register before the view moves; "← Back" on the next step
+  // still lets them change their mind if they tapped the wrong one.
+  clearTimeout(window.__roomAdvanceTimer);
+  window.__roomAdvanceTimer = setTimeout(function(){ goStep(2); }, 320);
 }
 
 function backToLocationChoice(){
@@ -1351,6 +1376,7 @@ function pickDur(type,el){
 
 // ─── STEP NAVIGATION ──────────────────────────────────────────────────────────
 function goStep(n){
+  clearTimeout(window.__roomAdvanceTimer); // cancel any pending room auto-advance now that navigation is actually happening
   if(n===5){
     var err=document.getElementById('form-err');
     var nm=v('f-name'),ph=v('f-phone'),em=v('f-email');
@@ -1427,8 +1453,74 @@ function initStep2(){
   document.getElementById('btn-n2').disabled=true;
   document.getElementById('day-panel').classList.add('hidden');
   selDate=null;
+
+  // Multi-day booking is HO-only — reset it fresh every time this step loads.
+  selEndDate=null;
+  var mdWrap=document.getElementById('multiday-wrap');
+  if(mdWrap) mdWrap.classList.toggle('hidden', bookingLocation!=='ho');
+  var mdCb=document.getElementById('f-multiday');
+  if(mdCb) mdCb.checked=false;
+  document.getElementById('enddate-box').classList.add('hidden');
+  document.getElementById('enddate-picker').value='';
+  hide('enddate-err'); hide('enddate-ok');
+
   renderDateTiles();
   loadCalBk();
+}
+
+// ─── MULTI-DAY (Head Office only) ──────────────────────────────────────────────
+function onMultiDayToggle(checked){
+  var box=document.getElementById('enddate-box');
+  var btn=document.getElementById('btn-n2');
+  hide('enddate-err'); hide('enddate-ok');
+  if(checked){
+    box.classList.remove('hidden');
+    var ep=document.getElementById('enddate-picker');
+    ep.min = selDate ? toKey(selDate) : '';
+    ep.value='';
+    selEndDate=null;
+    btn.disabled=true; // must pick a valid end date before continuing
+  } else {
+    box.classList.add('hidden');
+    selEndDate=null;
+    btn.disabled = !selDate;
+  }
+}
+
+function onEndDatePick(val){
+  var errEl=document.getElementById('enddate-err');
+  var okEl=document.getElementById('enddate-ok');
+  var btn=document.getElementById('btn-n2');
+  hide('enddate-err'); hide('enddate-ok'); btn.disabled=true;
+  if(!val || !selDate){ selEndDate=null; return; }
+  var parts=val.split('-');
+  var picked=new Date(parseInt(parts[0]),parseInt(parts[1])-1,parseInt(parts[2]));
+  picked.setHours(0,0,0,0);
+
+  if(picked.getTime() < selDate.getTime()){
+    showEl(errEl,'⚠️ End date can\'t be before the start date.');
+    selEndDate=null; return;
+  }
+  var cursor=new Date(selDate), hasSunday=false, spanDays=0;
+  while(cursor.getTime() <= picked.getTime()){
+    if(cursor.getDay()===0){ hasSunday=true; break; }
+    cursor.setDate(cursor.getDate()+1);
+    spanDays++;
+  }
+  if(hasSunday){
+    showEl(errEl,'⚠️ This range includes a Sunday, when Head Office is closed. Please choose separate bookings around it.');
+    selEndDate=null; return;
+  }
+  var MAX_SPAN_DAYS=14;
+  if(spanDays > MAX_SPAN_DAYS){
+    showEl(errEl,'⚠️ Multi-day bookings are limited to '+MAX_SPAN_DAYS+' days. For longer needs, please contact the admin team directly.');
+    selEndDate=null; return;
+  }
+  selEndDate=picked;
+  var ds=picked.toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  showEl(okEl,'✅ Ends '+ds+' ('+spanDays+' day'+(spanDays>1?'s':'')+')');
+  btn.disabled=false;
+  renderDateTiles();
 }
 
 // ─── DATE SELECTION ───────────────────────────────────────────────────────────
@@ -1452,7 +1544,22 @@ function onDatePick(val){
   selDate=picked;
   var ds=picked.toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
   showEl(okEl,'✅ '+ds+' selected');
-  btn.disabled=false;
+
+  // If a multi-day end date was already chosen, the start date just moved
+  // out from under it — clear it and make the person re-confirm the range
+  // rather than silently keeping a now-stale/possibly-invalid end date.
+  var mdCb=document.getElementById('f-multiday');
+  if(mdCb && mdCb.checked){
+    var ep=document.getElementById('enddate-picker');
+    ep.min = val;
+    ep.value='';
+    selEndDate=null;
+    hide('enddate-err'); hide('enddate-ok');
+    btn.disabled=true; // waiting on a fresh end-date pick
+  } else {
+    btn.disabled=false;
+  }
+
   showDayPanel(toKey(picked),picked);
   renderDateTiles();
 }
@@ -1526,7 +1633,10 @@ function setupTime(){
   var df=DUR_DEF[durKey()];
   sH=df.sH;sM=df.sM;sAP=df.sAP;eH=df.eH;eM=df.eM;eAP=df.eAP;
   syncAP(); updateTime(); buildPresets(); checkConflict();
-  document.getElementById('time-sub').textContent = (bookingLocation==='ho' ? (selRoom+' · ') : (DUR_LBL[selDur]+' · ')) + selDate.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'long'});
+  var dateLabel = selEndDate
+    ? selDate.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'long'}) + ' – ' + selEndDate.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'long'})
+    : selDate.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'long'});
+  document.getElementById('time-sub').textContent = (bookingLocation==='ho' ? (selRoom+' · ') : (DUR_LBL[selDur]+' · ')) + dateLabel;
   document.getElementById('btn-n3').disabled=false;
 }
 function syncAP(){
@@ -1574,10 +1684,27 @@ function applyPreset(i){
 }
 function checkConflict(){
   if(!selDate)return;
-  var entries=dayEntries(toKey(selDate));
-  var approved=entries.filter(function(b){return b.status==='Approved';});
   var myS=toMins(sH,sM,sAP),myE=toMins(eH,eM,eAP);
-  var c=approved.some(function(b){var bs=parseT(b.time),be=parseT(b.endTime);return bs!==null&&be!==null&&myS<be&&myE>bs;});
+  // Multi-day: walk every day in [selDate, selEndDate]. On the first day only
+  // the window from myS onward is ours; on the last day only up to myE; any
+  // day in between is occupied for its whole 24h by our own request, so any
+  // approved booking that day at all is a conflict.
+  var endD = selEndDate || selDate;
+  var c=false;
+  var cursor=new Date(selDate);
+  while(cursor.getTime() <= endD.getTime()){
+    var isFirst = cursor.getTime()===selDate.getTime();
+    var isLast  = cursor.getTime()===endD.getTime();
+    var dayS = isFirst ? myS : 0;
+    var dayE = isLast  ? myE : 24*60;
+    var approvedThatDay = dayEntries(toKey(cursor)).filter(function(b){return b.status==='Approved';});
+    var dayConflict = approvedThatDay.some(function(b){
+      var bs=parseT(b.time), be=parseT(b.endTime);
+      return bs!==null && be!==null && dayS<be && dayE>bs;
+    });
+    if(dayConflict){ c=true; break; }
+    cursor.setDate(cursor.getDate()+1);
+  }
   var conflictEl=document.getElementById('conflict');
   var btn=document.getElementById('btn-n3');
   if(bookingLocation==='ho'){
@@ -1673,12 +1800,15 @@ function buildSummary(){
   var budgetVal=v('f-budget-approval');
   var budgetRow = budgetVal ? row('💰 Budget Approval',budgetVal) : '';
   var attachmentRow = budgetAttachment ? row('📎 Attachment',escapeHtml(budgetAttachment.name)) : '';
+  var hoDateDisplay = selEndDate
+    ? selDate.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'long',year:'numeric'}) + ' – ' + selEndDate.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'long',year:'numeric'})
+    : selDate.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'long',year:'numeric'});
   var html = bookingLocation==='ho'
     ? row('🏢 Location','<span class="pill pill-p">Head Office</span>')
       + row('📁 Project',v('f-project'))
       + row('🚪 Room', selRoom)
       + row('🪑 Seating Setup',escapeHtml(getSeatingValue()||'—'))
-      + row('📅 Date',selDate.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'long',year:'numeric'}))
+      + row('📅 Date',hoDateDisplay)
       + row('🕐 From','<span class="pill pill-t">'+fmtT(sH,sM,sAP)+'</span>')
       + row('🕔 To','<span class="pill pill-t">'+fmtT(eH,eM,eAP)+'</span>')
       + row('👥 Attendees',escapeHtml(v('f-attendees')))
@@ -1727,6 +1857,10 @@ async function submitBooking(){
       additionalRequirements:getSelectedReqs(),
       date:selDate.toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'}),
       dateKey:toKey(selDate),
+      // MULTI-DAY: omitted for a single-day booking, in which case the
+      // backend defaults endDateKey to the start date automatically.
+      endDate: selEndDate ? selEndDate.toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'}) : undefined,
+      endDateKey: selEndDate ? toKey(selEndDate) : undefined,
       time:fmtT(sH,sM,sAP), endTime:fmtT(eH,eM,eAP)
     };
   } else {
@@ -1924,10 +2058,20 @@ function rescheduleBlock(booking){
   var isHOBooking = booking.location==='Head Office';
   var minD = rsMinDate(isHOBooking?'ho':'karigar');
   var dateLabel = isHOBooking ? 'New Date (same-day is fine)' : 'New Date (must be at least 5 days from today)';
+  // Multi-day option, HO only — mirrors the toggle used on the initial booking form.
+  var multiDayHtml = isHOBooking
+    ? '<label style="display:flex;align-items:center;gap:8px;font-size:.82rem;cursor:pointer;margin:2px 0 8px">'
+      +'<input type="checkbox" id="rs-multiday-'+booking.id+'" onchange="onRsMultiDayToggle(\''+booking.id+'\',this.checked)" style="width:15px;height:15px;accent-color:#c96f53">'
+      +'This booking spans multiple days</label>'
+      +'<div class="fg hidden" id="rs-enddate-wrap-'+booking.id+'"><label>New End Date</label>'
+      +'<input type="date" class="rs-date" id="rs-enddate-'+booking.id+'" min="'+minD+'" style="border-color:#e8c97a"/></div>'
+      +'<div id="rs-enddate-err-'+booking.id+'" class="msg msg-err hidden" style="margin-bottom:8px"></div>'
+    : '';
   return '<div class="reschedule-box"><h4>🔄 Need a different time?</h4>'
     +'<div class="reschedule-form">'
     +'<div class="fg"><label>'+dateLabel+'</label>'
-    +'<input type="date" class="rs-date" id="rs-date-'+booking.id+'" min="'+minD+'" style="border-color:#e8c97a"/></div>'
+    +'<input type="date" class="rs-date" id="rs-date-'+booking.id+'" min="'+minD+'" onchange="onRsDateChange(\''+booking.id+'\')" style="border-color:#e8c97a"/></div>'
+    +multiDayHtml
     +'<div class="fg"><label>Start Time</label>'
     +'<select id="rs-start-'+booking.id+'" onchange="onRescheduleStartChange(\''+booking.id+'\')" style="border-color:#e8c97a">'+renderRescheduleTimeOptions('')+'</select></div>'
     +'<div class="fg"><label>End Time</label>'
@@ -1936,6 +2080,22 @@ function rescheduleBlock(booking){
     +'<button class="btn-accent" onclick="submitReschedule(\''+booking.id+'\',\''+(isHOBooking?'ho':'karigar')+'\')">📅 Request Reschedule</button>'
     +'<div id="rs-msg-'+booking.id+'" style="margin-top:8px"></div>'
     +'</div></div>';
+}
+
+// Keeps the reschedule end-date field's min in sync with whatever start date
+// was just picked, so the browser's own date picker won't offer an
+// impossible (before-start) end date.
+function onRsDateChange(bookingId){
+  var startVal=document.getElementById('rs-date-'+bookingId).value;
+  var endInput=document.getElementById('rs-enddate-'+bookingId);
+  if(endInput && startVal) endInput.min=startVal;
+}
+
+function onRsMultiDayToggle(bookingId, checked){
+  var wrap=document.getElementById('rs-enddate-wrap-'+bookingId);
+  if(!wrap) return;
+  wrap.classList.toggle('hidden', !checked);
+  if(!checked) document.getElementById('rs-enddate-'+bookingId).value='';
 }
 
 async function submitReschedule(bookingId, location){
@@ -1961,10 +2121,46 @@ async function submitReschedule(bookingId, location){
     msgEl.innerHTML='<div class="msg msg-err">Head Office is closed on Sundays. Please pick another date.</div>';
     return;
   }
+
+  // MULTI-DAY (HO only): if the checkbox is checked, an end date is required
+  // and must be a valid Sunday-free range. The backend re-validates this
+  // regardless — this is just an early, friendlier check.
+  var newEndDateKey='', newEndDateDisplay='';
+  if(isHOBooking){
+    var mdCb=document.getElementById('rs-multiday-'+bookingId);
+    if(mdCb && mdCb.checked){
+      var endVal=document.getElementById('rs-enddate-'+bookingId).value;
+      if(!endVal){
+        msgEl.innerHTML='<div class="msg msg-err">Please select the new end date, or uncheck the multi-day option.</div>'; return;
+      }
+      var ep=endVal.split('-');
+      var ed=new Date(parseInt(ep[0]),parseInt(ep[1])-1,parseInt(ep[2]));
+      ed.setHours(0,0,0,0);
+      if(ed.getTime() < d.getTime()){
+        msgEl.innerHTML='<div class="msg msg-err">End date can\'t be before the start date.</div>'; return;
+      }
+      var cursor=new Date(d), hasSunday=false, spanDays=0;
+      while(cursor.getTime() <= ed.getTime()){
+        if(cursor.getDay()===0){ hasSunday=true; break; }
+        cursor.setDate(cursor.getDate()+1); spanDays++;
+      }
+      if(hasSunday){
+        msgEl.innerHTML='<div class="msg msg-err">This range includes a Sunday, when Head Office is closed.</div>'; return;
+      }
+      if(spanDays > 14){
+        msgEl.innerHTML='<div class="msg msg-err">Multi-day bookings are limited to 14 days.</div>'; return;
+      }
+      newEndDateKey=endVal;
+      newEndDateDisplay=ed.toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'});
+    }
+  }
+
   msgEl.innerHTML='<div class="msg msg-warn">⏳ Submitting reschedule request…</div>';
-  var data=await apiPost({action:isHOBooking?'rescheduleHO':'reschedule',bookingId:bookingId,newDateKey:newDate,
+  var payload={action:isHOBooking?'rescheduleHO':'reschedule',bookingId:bookingId,newDateKey:newDate,
     newDate:d.toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'}),
-    newTime:newStart,newEndTime:newEnd});
+    newTime:newStart,newEndTime:newEnd};
+  if(newEndDateKey){ payload.newEndDateKey=newEndDateKey; payload.newEndDate=newEndDateDisplay; }
+  var data=await apiPost(payload);
   if(data&&data.success){
     msgEl.innerHTML='<div class="msg msg-ok">✅ Reschedule request submitted! The team will review and confirm.</div>';
     await refreshCalendarData();
@@ -2007,7 +2203,7 @@ async function apiPost(payload){
 
 // ─── FORM RESET ───────────────────────────────────────────────────────────────
 function resetForm(){
-  selDur=null;selDate=null;curStep=0;calBk={};rescheduleMode=false;bookingLocation=null;selRoom=null;
+  selDur=null;selDate=null;selEndDate=null;curStep=0;calBk={};rescheduleMode=false;bookingLocation=null;selRoom=null;
   ['f-name','f-phone','f-email','f-work-details','f-purpose','f-attendees','f-room-display','f-project','f-seating-other'].forEach(function(id){
     var el=document.getElementById(id); if(el) el.value='';
   });
