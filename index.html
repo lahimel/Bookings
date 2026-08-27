@@ -879,7 +879,6 @@ textarea{min-height:96px;resize:vertical}
             <div class="dd">Quick fixes<br>Demos &amp; repairs</div>
           </div>
         </div>
-        <button class="btn btn-p" id="btn-n1" onclick="goStep(2)" disabled>Next: Pick a Date →</button>
         <button class="btn btn-s" style="width:100%;margin-top:10px" onclick="backToLocationChoice()">← Change Location</button>
       </div>
 
@@ -917,9 +916,10 @@ textarea{min-height:96px;resize:vertical}
           <div id="date-err" class="msg msg-err hidden"></div>
           <div id="date-ok"  class="msg msg-ok  hidden"></div>
 
-          <!-- Multi-day toggle — Head Office only. A hall can be booked across
-               several consecutive days (e.g. a multi-day training), as long
-               as the range doesn't cross a Sunday (HO is closed that day). -->
+          <!-- Multi-day toggle — both Karigar and HO. A hall/lab can be
+               booked across several consecutive days (e.g. a multi-day
+               training). HO can't cross a Sunday (closed that day);
+               Karigar has no such restriction - see initStep2(). -->
           <div id="multiday-wrap" class="hidden" style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
             <label style="display:flex;align-items:center;gap:9px;font-size:.85rem;cursor:pointer;color:var(--text)">
               <input type="checkbox" id="f-multiday" onchange="onMultiDayToggle(this.checked)" style="width:16px;height:16px;accent-color:var(--primary)">
@@ -928,7 +928,7 @@ textarea{min-height:96px;resize:vertical}
             <div id="enddate-box" class="hidden" style="margin-top:12px">
               <div class="date-label">Select end date</div>
               <input type="date" id="enddate-picker" class="date-input" onchange="onEndDatePick(this.value)"/>
-              <div class="date-note">Ranges can't cross a Sunday (Head Office is closed) and are limited to 14 days.</div>
+              <div class="date-note" id="enddate-note">Ranges are limited to 14 days.</div>
               <div id="enddate-err" class="msg msg-err hidden"></div>
               <div id="enddate-ok"  class="msg msg-ok  hidden"></div>
             </div>
@@ -939,7 +939,7 @@ textarea{min-height:96px;resize:vertical}
         <div id="day-panel" class="day-panel hidden"></div>
 
         <div class="btn-row">
-          <button class="btn btn-s" style="flex:0 0 auto;width:80px" onclick="goStep(1)">← Back</button>
+          <button class="btn btn-s" style="flex:0 0 auto;width:80px" onclick="backFromDate()">← Back</button>
           <button class="btn btn-p" id="btn-n2" onclick="goStep(3)" disabled>Next: Set Time →</button>
         </div>
       </div>
@@ -1279,13 +1279,18 @@ var DUR_DEF={
   full:{sH:9,sM:0,sAP:'AM',eH:5,eM:0,eAP:'PM'},
   half:{sH:9,sM:0,sAP:'AM',eH:1,eM:0,eAP:'PM'},
   hourly:{sH:9,sM:0,sAP:'AM',eH:10,eM:0,eAP:'AM'},
-  ho:{sH:9,sM:0,sAP:'AM',eH:10,eM:0,eAP:'AM'}
+  ho:{sH:9,sM:0,sAP:'AM',eH:10,eM:0,eAP:'AM'},
+  // Karigar no longer asks for a Type up front (auto-derived from the chosen
+  // time span instead - see goStep's n===5 handling), so the Time step needs
+  // a sensible starting point before that derivation happens.
+  default:{sH:9,sM:0,sAP:'AM',eH:1,eM:0,eAP:'PM'}
 };
 var PRESETS={
   full:[{l:'9AM–5PM',sH:9,sM:0,sAP:'AM',eH:5,eM:0,eAP:'PM'},{l:'8AM–4PM',sH:8,sM:0,sAP:'AM',eH:4,eM:0,eAP:'PM'},{l:'10AM–6PM',sH:10,sM:0,sAP:'AM',eH:6,eM:0,eAP:'PM'}],
   half:[{l:'9AM–1PM',sH:9,sM:0,sAP:'AM',eH:1,eM:0,eAP:'PM'},{l:'2PM–6PM',sH:2,sM:0,sAP:'PM',eH:6,eM:0,eAP:'PM'},{l:'8AM–12PM',sH:8,sM:0,sAP:'AM',eH:12,eM:0,eAP:'PM'}],
   hourly:[{l:'9–10AM',sH:9,sM:0,sAP:'AM',eH:10,eM:0,eAP:'AM'},{l:'10–11AM',sH:10,sM:0,sAP:'AM',eH:11,eM:0,eAP:'AM'},{l:'11AM–12',sH:11,sM:0,sAP:'AM',eH:12,eM:0,eAP:'PM'},{l:'2–3PM',sH:2,sM:0,sAP:'PM',eH:3,eM:0,eAP:'PM'},{l:'3–4PM',sH:3,sM:0,sAP:'PM',eH:4,eM:0,eAP:'PM'},{l:'4–5PM',sH:4,sM:0,sAP:'PM',eH:5,eM:0,eAP:'PM'}],
-  ho:[{l:'9–10AM',sH:9,sM:0,sAP:'AM',eH:10,eM:0,eAP:'AM'},{l:'10–11AM',sH:10,sM:0,sAP:'AM',eH:11,eM:0,eAP:'AM'},{l:'11AM–12',sH:11,sM:0,sAP:'AM',eH:12,eM:0,eAP:'PM'},{l:'2–3PM',sH:2,sM:0,sAP:'PM',eH:3,eM:0,eAP:'PM'},{l:'3–4PM',sH:3,sM:0,sAP:'PM',eH:4,eM:0,eAP:'PM'},{l:'4–5PM',sH:4,sM:0,sAP:'PM',eH:5,eM:0,eAP:'PM'}]
+  ho:[{l:'9–10AM',sH:9,sM:0,sAP:'AM',eH:10,eM:0,eAP:'AM'},{l:'10–11AM',sH:10,sM:0,sAP:'AM',eH:11,eM:0,eAP:'AM'},{l:'11AM–12',sH:11,sM:0,sAP:'AM',eH:12,eM:0,eAP:'PM'},{l:'2–3PM',sH:2,sM:0,sAP:'PM',eH:3,eM:0,eAP:'PM'},{l:'3–4PM',sH:3,sM:0,sAP:'PM',eH:4,eM:0,eAP:'PM'},{l:'4–5PM',sH:4,sM:0,sAP:'PM',eH:5,eM:0,eAP:'PM'}],
+  default:[{l:'9AM–1PM',sH:9,sM:0,sAP:'AM',eH:1,eM:0,eAP:'PM'},{l:'9AM–5PM',sH:9,sM:0,sAP:'AM',eH:5,eM:0,eAP:'PM'},{l:'2PM–6PM',sH:2,sM:0,sAP:'PM',eH:6,eM:0,eAP:'PM'},{l:'10–11AM',sH:10,sM:0,sAP:'AM',eH:11,eM:0,eAP:'AM'}]
 };
 
 // ─── TABS (unchanged) ─────────────────────────────────────────────────────────
@@ -1309,7 +1314,9 @@ function pickLocation(loc, el){
   var si1lbl=document.getElementById('si-1-lbl');
   if(si1lbl) si1lbl.textContent = loc==='ho' ? 'Room' : 'Type';
 
-  document.getElementById('step-1').classList.toggle('hidden', loc!=='karigar');
+  // step-1 (Type) is dormant for Karigar now - it's never the target step,
+  // so always keep it hidden here rather than conditionally showing it.
+  document.getElementById('step-1').classList.add('hidden');
   document.getElementById('step-1-ho').classList.toggle('hidden', loc!=='ho');
 
   document.querySelectorAll('.req-karigar-only').forEach(function(el){el.classList.toggle('hidden', loc!=='karigar');});
@@ -1331,13 +1338,29 @@ function pickLocation(loc, el){
 
   document.getElementById('step-0').classList.add('hidden');
   document.getElementById('steps-indicator').classList.remove('hidden');
-  curStep=1;
-  [1,2,3,4,5].forEach(function(i){
-    var s=document.getElementById('si-'+i); if(!s)return;
-    s.classList.remove('active','done');
-    if(i===1) s.classList.add('active');
-  });
-  pushNavState({view:'book', step:1});
+
+  if(loc==='karigar'){
+    // No Type step to visit anymore - land straight on Date. Session type
+    // gets derived later from the chosen time span (see deriveDurationType).
+    document.getElementById('step-2').classList.remove('hidden');
+    curStep=2;
+    [1,2,3,4,5].forEach(function(i){
+      var s=document.getElementById('si-'+i); if(!s)return;
+      s.classList.remove('active','done');
+      if(i===1) s.classList.add('done');
+      if(i===2) s.classList.add('active');
+    });
+    initStep2();
+    pushNavState({view:'book', step:2});
+  } else {
+    curStep=1;
+    [1,2,3,4,5].forEach(function(i){
+      var s=document.getElementById('si-'+i); if(!s)return;
+      s.classList.remove('active','done');
+      if(i===1) s.classList.add('active');
+    });
+    pushNavState({view:'book', step:1});
+  }
 }
 
 function renderRooms(){
@@ -1368,16 +1391,27 @@ function pickRoom(roomId, el){
 }
 
 function backToLocationChoice(){
-  var curId = bookingLocation==='ho' ? 'step-1-ho' : 'step-1';
-  document.getElementById(curId).classList.add('hidden');
+  // Hide whichever step is actually showing right now - not just step-1/
+  // step-1-ho, since Karigar can now reach this function directly from the
+  // Date step (curStep===2) via backFromDate().
+  var curId = curStep===1 ? (bookingLocation==='ho' ? 'step-1-ho' : 'step-1') : 'step-'+curStep;
+  var curEl = document.getElementById(curId);
+  if(curEl) curEl.classList.add('hidden');
   document.getElementById('steps-indicator').classList.add('hidden');
   document.getElementById('step-0').classList.remove('hidden');
   document.querySelectorAll('#step-0 .dur-card, #step-1 .dur-card, #room-grid .dur-card').forEach(function(c){c.classList.remove('selected');});
   bookingLocation=null; selDur=null; selRoom=null; selDate=null; selEndDate=null; curStep=0;
-  document.getElementById('btn-n1').disabled=true;
   [1,2,3,4,5].forEach(function(i){var s=document.getElementById('si-'+i);if(s)s.classList.remove('active','done');});
   document.getElementById('si-1').classList.add('active');
   pushNavState({view:'book', step:0});
+}
+
+// Date step's "← Back": for HO this still returns to Room selection, but
+// Karigar no longer has a Type step to land on - there's nothing between
+// Location choice and Date for it anymore, so go all the way back to step 0.
+function backFromDate(){
+  if(bookingLocation==='karigar') backToLocationChoice();
+  else goStep(1);
 }
 
 // ─── STEP 1 (Karigar) ─────────────────────────────────────────────────────────
@@ -1385,12 +1419,20 @@ function pickDur(type,el){
   selDur=type;
   document.querySelectorAll('#step-1 .dur-card').forEach(function(c){c.classList.remove('selected');});
   el.classList.add('selected');
-  document.getElementById('btn-n1').disabled=false;
+
+  // Auto-advance: same reasoning as the HO room picker - all three options
+  // are already fully visible with their descriptions, so there's nothing
+  // left to decide once one is tapped. Short delay lets the selection
+  // highlight register; "← Back" on the next step still allows a change of
+  // mind.
+  clearTimeout(window.__durAdvanceTimer);
+  window.__durAdvanceTimer = setTimeout(function(){ goStep(2); }, 320);
 }
 
 // ─── STEP NAVIGATION ──────────────────────────────────────────────────────────
 function goStep(n){
   clearTimeout(window.__roomAdvanceTimer); // cancel any pending room auto-advance now that navigation is actually happening
+  clearTimeout(window.__durAdvanceTimer);  // same, for the Karigar session-type auto-advance
   if(n===5){
     var err=document.getElementById('form-err');
     var nm=v('f-name'),ph=v('f-phone'),em=v('f-email');
@@ -1409,6 +1451,7 @@ function goStep(n){
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)){showEl(err,'Enter a valid email address.');return;}
     if(!/^\d{10}$/.test(ph)){showEl(err,'Phone must be exactly 10 digits.');return;}
     err.classList.add('hidden');
+    if(bookingLocation!=='ho') deriveDurationType();
     buildSummary();
   }
   if(n===4){
@@ -1450,7 +1493,8 @@ function goStep(n){
 function initStep2(){
   document.getElementById('dur-remind').textContent = bookingLocation==='ho'
     ? 'Selected: '+selRoom+' · View the calendar above, then pick your date below'
-    : 'Selected: '+DUR_LBL[selDur]+' · View the calendar above, then pick your date below';
+    : (selDur ? 'Selected: '+DUR_LBL[selDur]+' · View the calendar above, then pick your date below'
+              : 'View the calendar above, then pick your date below');
   updateCalEmbed();
   var dp=document.getElementById('date-picker');
   var minDate=minLeadDate(bookingLocation);
@@ -1464,7 +1508,11 @@ function initStep2(){
     noteEl.style.display = bookingLocation==='ho' ? 'none' : '';
   }
   var mdWrap=document.getElementById('multiday-wrap');
-  if(mdWrap) mdWrap.classList.toggle('hidden', bookingLocation!=='ho');
+  if(mdWrap) mdWrap.classList.remove('hidden'); // now available for both Karigar and HO
+  var edNote=document.getElementById('enddate-note');
+  if(edNote) edNote.textContent = bookingLocation==='ho'
+    ? "Ranges can't cross a Sunday (Head Office is closed) and are limited to 14 days."
+    : 'Ranges are limited to 14 days.';
 
   if(selDate){
     // Re-entering with a date already chosen — this is a *return* to the
@@ -1511,7 +1559,7 @@ function initStep2(){
   loadCalBk();
 }
 
-// ─── MULTI-DAY (Head Office only) ──────────────────────────────────────────────
+// ─── MULTI-DAY (Karigar and HO) ──────────────────────────────────────────────
 function onMultiDayToggle(checked){
   var box=document.getElementById('enddate-box');
   var btn=document.getElementById('btn-n2');
@@ -1546,11 +1594,11 @@ function onEndDatePick(val){
   }
   var cursor=new Date(selDate), hasSunday=false, spanDays=0;
   while(cursor.getTime() <= picked.getTime()){
-    if(cursor.getDay()===0){ hasSunday=true; break; }
+    if(cursor.getDay()===0) hasSunday=true;
     cursor.setDate(cursor.getDate()+1);
     spanDays++;
   }
-  if(hasSunday){
+  if(bookingLocation==='ho' && hasSunday){
     showEl(errEl,'⚠️ This range includes a Sunday, when Head Office is closed. Please choose separate bookings around it.');
     selEndDate=null; return;
   }
@@ -1672,7 +1720,7 @@ function showDayPanel(key,date){
 }
 
 // ─── STEP 3: TIME ─────────────────────────────────────────────────────────────
-function durKey(){ return bookingLocation==='ho' ? 'ho' : selDur; }
+function durKey(){ return bookingLocation==='ho' ? 'ho' : (selDur || 'default'); }
 function setupTime(){
   var df=DUR_DEF[durKey()];
   sH=df.sH;sM=df.sM;sAP=df.sAP;eH=df.eH;eM=df.eM;eAP=df.eAP;
@@ -1680,7 +1728,7 @@ function setupTime(){
   var dateLabel = selEndDate
     ? selDate.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'long'}) + ' – ' + selEndDate.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'long'})
     : selDate.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'long'});
-  document.getElementById('time-sub').textContent = (bookingLocation==='ho' ? (selRoom+' · ') : (DUR_LBL[selDur]+' · ')) + dateLabel;
+  document.getElementById('time-sub').textContent = (bookingLocation==='ho' ? (selRoom+' · ') : (selDur ? DUR_LBL[selDur]+' · ' : '')) + dateLabel;
   document.getElementById('btn-n3').disabled=false;
 }
 function syncAP(){
@@ -1865,7 +1913,7 @@ function buildSummary(){
       + budgetRow
       + attachmentRow
     : row('⏱ Session Type','<span class="pill pill-p">'+DUR_LBL[selDur]+'</span>')
-      + row('📅 Date',selDate.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'long',year:'numeric'}))
+      + row('📅 Date',hoDateDisplay)
       + row('🕐 From','<span class="pill pill-t">'+fmtT(sH,sM,sAP)+'</span>')
       + row('🕔 To','<span class="pill pill-t">'+fmtT(eH,eM,eAP)+'</span>')
       + row('🗂 Type of Work',v('f-type'))
@@ -1923,6 +1971,10 @@ async function submitBooking(){
       additionalRequirements:getSelectedReqs(),
       date:selDate.toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'}),
       dateKey:toKey(selDate),
+      // MULTI-DAY: omitted for a single-day booking, in which case the
+      // backend defaults endDateKey to the start date automatically.
+      endDate: selEndDate ? selEndDate.toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'}) : undefined,
+      endDateKey: selEndDate ? toKey(selEndDate) : undefined,
       time:fmtT(sH,sM,sAP), endTime:fmtT(eH,eM,eAP)
     };
   }
@@ -1988,7 +2040,7 @@ async function checkStatus(){
         var locTag='<span class="loc-tag '+(isHO?'loc-tag-ho':'loc-tag-karigar')+'">'+(isHO?'Head Office':'Karigar')+'</span>';
         var rowsHtml = isHO
           ? row('📁 Project',b.projectName||'—')+row('🚪 Room',b.room||'—')+row('🪑 Seating Setup',b.seatingSetup||'—')+row('👥 Attendees',b.attendees||'—')+((b.namedAttendees&&b.namedAttendees.length)?row('🙋 Named Attendees',b.namedAttendees.map(function(p){return escapeHtml(p.name||p.email);}).join(', ')):'')+row('📝 Remarks',b.purpose||'None')+row('📋 Requirements',escapeHtml(b.additionalRequirements||'None'))+(b.budgetApproval?row('💰 Budget Approval',b.budgetApproval):'')+row('📅 Date',b.dateRange||b.date)+row('🕐 From',b.time||'—')+row('🕔 To',b.endTime||'—')
-          : row('⏱ Session Type',b.duration||'—')+row('🏷 Type of Work',b.typeOfWork||b.service||'—')+row('🏫 Labs',b.labs||'—')+row('📝 Details',b.workDetails||'—')+row('📋 Requirements',escapeHtml(b.additionalRequirements||'None'))+row('📅 Date',b.date)+row('🕐 From',b.time||'—')+row('🕔 To',b.endTime||'—');
+          : row('⏱ Session Type',b.duration||'—')+row('🏷 Type of Work',b.typeOfWork||b.service||'—')+row('🏫 Labs',b.labs||'—')+row('📝 Details',b.workDetails||'—')+row('📋 Requirements',escapeHtml(b.additionalRequirements||'None'))+row('📅 Date',b.dateRange||b.date)+row('🕐 From',b.time||'—')+row('🕔 To',b.endTime||'—');
         return '<div class="stcard">'
           +'<div class="stcard-head"><strong>'+locTag+(isHO?(b.room||'Meeting'):(b.typeOfWork||b.service||'—'))+'</strong><span class="stb stb-'+b.status+'">'+b.status+'</span></div>'
           +rowsHtml
@@ -2106,15 +2158,13 @@ function rescheduleBlock(booking){
   var isHOBooking = booking.location==='Head Office';
   var minD = rsMinDate(isHOBooking?'ho':'karigar');
   var dateLabel = isHOBooking ? 'New Date (same-day is fine)' : 'New Date (must be at least 5 days from today)';
-  // Multi-day option, HO only — mirrors the toggle used on the initial booking form.
-  var multiDayHtml = isHOBooking
-    ? '<label style="display:flex;align-items:center;gap:8px;font-size:.82rem;cursor:pointer;margin:2px 0 8px">'
+  // Multi-day option, both Karigar and HO — mirrors the toggle used on the initial booking form.
+  var multiDayHtml = '<label style="display:flex;align-items:center;gap:8px;font-size:.82rem;cursor:pointer;margin:2px 0 8px">'
       +'<input type="checkbox" id="rs-multiday-'+booking.id+'" onchange="onRsMultiDayToggle(\''+booking.id+'\',this.checked)" style="width:15px;height:15px;accent-color:#c96f53">'
       +'This booking spans multiple days</label>'
       +'<div class="fg hidden" id="rs-enddate-wrap-'+booking.id+'"><label>New End Date</label>'
       +'<input type="date" class="rs-date" id="rs-enddate-'+booking.id+'" min="'+minD+'" style="border-color:#e8c97a"/></div>'
-      +'<div id="rs-enddate-err-'+booking.id+'" class="msg msg-err hidden" style="margin-bottom:8px"></div>'
-    : '';
+      +'<div id="rs-enddate-err-'+booking.id+'" class="msg msg-err hidden" style="margin-bottom:8px"></div>';
   return '<div class="reschedule-box"><h4>🔄 Need a different time?</h4>'
     +'<div class="reschedule-form">'
     +'<div class="fg"><label>'+dateLabel+'</label>'
@@ -2170,37 +2220,35 @@ async function submitReschedule(bookingId, location){
     return;
   }
 
-  // MULTI-DAY (HO only): if the checkbox is checked, an end date is required
-  // and must be a valid Sunday-free range. The backend re-validates this
-  // regardless — this is just an early, friendlier check.
+  // MULTI-DAY (both locations): if the checkbox is checked, an end date is
+  // required and must be a valid range - Sunday-free only for HO. The
+  // backend re-validates this regardless - this is just an early, friendlier check.
   var newEndDateKey='', newEndDateDisplay='';
-  if(isHOBooking){
-    var mdCb=document.getElementById('rs-multiday-'+bookingId);
-    if(mdCb && mdCb.checked){
-      var endVal=document.getElementById('rs-enddate-'+bookingId).value;
-      if(!endVal){
-        msgEl.innerHTML='<div class="msg msg-err">Please select the new end date, or uncheck the multi-day option.</div>'; return;
-      }
-      var ep=endVal.split('-');
-      var ed=new Date(parseInt(ep[0]),parseInt(ep[1])-1,parseInt(ep[2]));
-      ed.setHours(0,0,0,0);
-      if(ed.getTime() < d.getTime()){
-        msgEl.innerHTML='<div class="msg msg-err">End date can\'t be before the start date.</div>'; return;
-      }
-      var cursor=new Date(d), hasSunday=false, spanDays=0;
-      while(cursor.getTime() <= ed.getTime()){
-        if(cursor.getDay()===0){ hasSunday=true; break; }
-        cursor.setDate(cursor.getDate()+1); spanDays++;
-      }
-      if(hasSunday){
-        msgEl.innerHTML='<div class="msg msg-err">This range includes a Sunday, when Head Office is closed.</div>'; return;
-      }
-      if(spanDays > 14){
-        msgEl.innerHTML='<div class="msg msg-err">Multi-day bookings are limited to 14 days.</div>'; return;
-      }
-      newEndDateKey=endVal;
-      newEndDateDisplay=ed.toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'});
+  var mdCb=document.getElementById('rs-multiday-'+bookingId);
+  if(mdCb && mdCb.checked){
+    var endVal=document.getElementById('rs-enddate-'+bookingId).value;
+    if(!endVal){
+      msgEl.innerHTML='<div class="msg msg-err">Please select the new end date, or uncheck the multi-day option.</div>'; return;
     }
+    var ep=endVal.split('-');
+    var ed=new Date(parseInt(ep[0]),parseInt(ep[1])-1,parseInt(ep[2]));
+    ed.setHours(0,0,0,0);
+    if(ed.getTime() < d.getTime()){
+      msgEl.innerHTML='<div class="msg msg-err">End date can\'t be before the start date.</div>'; return;
+    }
+    var cursor=new Date(d), hasSunday=false, spanDays=0;
+    while(cursor.getTime() <= ed.getTime()){
+      if(cursor.getDay()===0) hasSunday=true;
+      cursor.setDate(cursor.getDate()+1); spanDays++;
+    }
+    if(isHOBooking && hasSunday){
+      msgEl.innerHTML='<div class="msg msg-err">This range includes a Sunday, when Head Office is closed.</div>'; return;
+    }
+    if(spanDays > 14){
+      msgEl.innerHTML='<div class="msg msg-err">Multi-day bookings are limited to 14 days.</div>'; return;
+    }
+    newEndDateKey=endVal;
+    newEndDateDisplay=ed.toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'});
   }
 
   msgEl.innerHTML='<div class="msg msg-warn">⏳ Submitting reschedule request…</div>';
@@ -2275,7 +2323,6 @@ function resetForm(){
   });
   clearSelectedLabs();
   document.querySelectorAll('.dur-card').forEach(function(c){c.classList.remove('selected');});
-  document.getElementById('btn-n1').disabled=true;
   for(var i=1;i<=6;i++){var e=document.getElementById('step-'+i);if(e)e.classList.add('hidden');}
   document.getElementById('step-1-ho').classList.add('hidden');
   document.getElementById('steps-indicator').classList.add('hidden');
@@ -2292,6 +2339,16 @@ function pad(n){return String(n).padStart(2,'0');}
 function toKey(d){return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
 function fmtT(h,m,ap){return h+':'+(m===0?'00':pad(m))+' '+ap;}
 function toMins(h,m,ap){var h2=h%12;if(ap==='PM')h2+=12;return h2*60+m;}
+
+// Karigar no longer asks "Full Day / Half Day / Hourly" up front (see
+// pickLocation/goStep) - this fills in that same label from the actual time
+// span the person ends up choosing, right before the review step. Thresholds
+// mirror the old manual options' own defaults (full=8h, half=4h, hourly=1h).
+function deriveDurationType(){
+  var span = toMins(eH,eM,eAP) - toMins(sH,sM,sAP);
+  if(span <= 0) span = 240; // defensive fallback; time-step validation should prevent this
+  selDur = span >= 360 ? 'full' : (span >= 180 ? 'half' : 'hourly');
+}
 function parseT(ts){if(!ts)return null;var m=(ts+'').match(/(\d+):(\d+)\s*(AM|PM)/i);return m?toMins(parseInt(m[1]),parseInt(m[2]),m[3].toUpperCase()):null;}
 function hide(id){document.getElementById(id).classList.add('hidden');}
 function showEl(el,txt){el.textContent=txt;el.classList.remove('hidden');}
