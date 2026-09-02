@@ -2020,7 +2020,7 @@ async function checkStatus(){
         var mc=b.status==='Approved'?'sm-a':b.status==='Declined'||b.status==='Cancelled'?'sm-d':'sm-p';
         var isHO=b.location==='Head Office';
         var mt=b.status==='Approved'?(isHO?'✅ Confirmed! The room is reserved for your meeting.':'✅ Confirmed! The Karigar team will be ready at your start time.')
-          :b.status==='Declined'?(isHO&&b.declineReason?'❌ Not approved — '+escapeHtml(b.declineReason):'❌ This booking was not approved.')
+          :b.status==='Declined'?(b.declineReason?'❌ Not approved — '+escapeHtml(b.declineReason):'❌ This booking was not approved.')
           :b.status==='Cancelled'?'🚫 This booking was cancelled.'
           :'⏳ Pending review — you\'ll be notified once confirmed.';
         // Reschedule form: only in reschedule mode, only for Pending/Approved —
