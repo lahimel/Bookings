@@ -933,6 +933,20 @@ textarea{min-height:96px;resize:vertical}
               <div id="enddate-ok"  class="msg msg-ok  hidden"></div>
             </div>
           </div>
+
+          <!-- Weekly recurring toggle — HO only. Mutually exclusive with
+               multi-day (a booking is one continuous block OR the same slot
+               repeating weekly, not both). Every occurrence becomes its own
+               row, all approved/declined together in one action. Fixed at 3
+               occurrences - no "until" date to pick, so there's nothing here
+               that can go stale if the start date changes afterward. -->
+          <div id="recurring-wrap" class="hidden" style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
+            <label style="display:flex;align-items:center;gap:9px;font-size:.85rem;cursor:pointer;color:var(--text)">
+              <input type="checkbox" id="f-recurring" onchange="onRecurringToggle(this.checked)" style="width:16px;height:16px;accent-color:var(--primary)">
+              This meeting repeats weekly
+            </label>
+            <div id="recurring-note" class="date-note hidden" style="margin-top:8px">Books the same day and time for 3 weeks in a row (this week plus the next 2).</div>
+          </div>
         </div>
 
         <!-- Day bookings panel -->
@@ -1256,6 +1270,7 @@ function startAutoRefresh(){
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
 var curStep=0, selDur=null, selDate=null, selEndDate=null, calBk={};
+var selRecurring=false; // WEEKLY RECURRING (HO only) - fixed at 3 occurrences, so this is just on/off
 
 // ─── BROWSER HISTORY (Back/Forward button support) ─────────────────────────────
 // The wizard never changes the URL, so by default the browser's Back button
@@ -1400,7 +1415,7 @@ function backToLocationChoice(){
   document.getElementById('steps-indicator').classList.add('hidden');
   document.getElementById('step-0').classList.remove('hidden');
   document.querySelectorAll('#step-0 .dur-card, #step-1 .dur-card, #room-grid .dur-card').forEach(function(c){c.classList.remove('selected');});
-  bookingLocation=null; selDur=null; selRoom=null; selDate=null; selEndDate=null; curStep=0;
+  bookingLocation=null; selDur=null; selRoom=null; selDate=null; selEndDate=null; selRecurring=false; curStep=0;
   [1,2,3,4,5].forEach(function(i){var s=document.getElementById('si-'+i);if(s)s.classList.remove('active','done');});
   document.getElementById('si-1').classList.add('active');
   pushNavState({view:'book', step:0});
@@ -1513,6 +1528,8 @@ function initStep2(){
   if(edNote) edNote.textContent = bookingLocation==='ho'
     ? "Ranges can't cross a Sunday (Head Office is closed) and are limited to 14 days."
     : 'Ranges are limited to 14 days.';
+  var recurWrap=document.getElementById('recurring-wrap');
+  if(recurWrap) recurWrap.classList.toggle('hidden', bookingLocation!=='ho'); // HO only
 
   if(selDate){
     // Re-entering with a date already chosen — this is a *return* to the
@@ -1541,6 +1558,11 @@ function initStep2(){
       if(ep) ep.value='';
       hide('enddate-err'); hide('enddate-ok');
     }
+
+    var recurCb=document.getElementById('f-recurring');
+    var recurNote=document.getElementById('recurring-note');
+    if(recurCb) recurCb.checked=selRecurring;
+    if(recurNote) recurNote.classList.toggle('hidden', !selRecurring);
   } else {
     // First real visit to this step for this booking — start from scratch.
     dp.value='';
@@ -1552,6 +1574,11 @@ function initStep2(){
     document.getElementById('enddate-box').classList.add('hidden');
     document.getElementById('enddate-picker').value='';
     hide('enddate-err'); hide('enddate-ok');
+
+    selRecurring=false;
+    var recurCb2=document.getElementById('f-recurring');
+    if(recurCb2) recurCb2.checked=false;
+    document.getElementById('recurring-note').classList.add('hidden');
   }
 
   document.getElementById('day-panel').classList.add('hidden'); // loadCalBk() re-shows it if selDate is set
@@ -1571,11 +1598,34 @@ function onMultiDayToggle(checked){
     ep.value='';
     selEndDate=null;
     btn.disabled=true; // must pick a valid end date before continuing
+    // Mutually exclusive with weekly-recurring - a booking is one
+    // continuous block OR the same slot repeating weekly, not both.
+    var recurCb=document.getElementById('f-recurring');
+    if(recurCb && recurCb.checked){ recurCb.checked=false; onRecurringToggle(false); }
   } else {
     box.classList.add('hidden');
     selEndDate=null;
     btn.disabled = !selDate;
   }
+}
+
+// ─── WEEKLY RECURRING (HO only) ─────────────────────────────────────────────────
+function onRecurringToggle(checked){
+  selRecurring = checked;
+  var note = document.getElementById('recurring-note');
+  var btn  = document.getElementById('btn-n2');
+  if(checked){
+    note.classList.remove('hidden');
+    // Mutually exclusive with multi-day - see onMultiDayToggle().
+    var mdCb=document.getElementById('f-multiday');
+    if(mdCb && mdCb.checked){ mdCb.checked=false; onMultiDayToggle(false); }
+  } else {
+    note.classList.add('hidden');
+  }
+  // Nothing to validate - a plain start date is all that's needed either
+  // way, so the Next button's enabled state just follows whether a date is
+  // picked at all, same as the non-recurring case.
+  btn.disabled = !selDate;
 }
 
 function onEndDatePick(val){
@@ -1650,6 +1700,11 @@ function onDatePick(val){
   } else {
     btn.disabled=false;
   }
+
+  // Note: weekly-recurring needs no equivalent reset here - it's just a
+  // boolean, and occurrences are always computed relative to whichever
+  // start date is currently selected, so changing the start date never
+  // leaves it in a stale state the way an independent "until" date would.
 
   showDayPanel(toKey(picked),picked);
   renderDateTiles();
@@ -1895,12 +1950,20 @@ function buildSummary(){
   var hoDateDisplay = selEndDate
     ? selDate.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'long',year:'numeric'}) + ' – ' + selEndDate.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'long',year:'numeric'})
     : selDate.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'long',year:'numeric'});
+  var recurringRow = '';
+  if(selRecurring){
+    var occDates=[], occCursor=new Date(selDate);
+    for(var w=0; w<3; w++){ occDates.push(occCursor.toLocaleDateString('en-IN',{day:'numeric',month:'short'})); occCursor.setDate(occCursor.getDate()+7); }
+    hoDateDisplay = selDate.toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+    recurringRow = row('Repeats','Weekly for 3 weeks: '+occDates.join(', '));
+  }
   var html = bookingLocation==='ho'
     ? row('🏢 Location','<span class="pill pill-p">Head Office</span>')
       + row('📁 Project',v('f-project'))
       + row('🚪 Room', selRoom)
       + row('🪑 Seating Setup',escapeHtml(getSeatingValue()||'—'))
       + row('📅 Date',hoDateDisplay)
+      + recurringRow
       + row('🕐 From','<span class="pill pill-t">'+fmtT(sH,sM,sAP)+'</span>')
       + row('🕔 To','<span class="pill pill-t">'+fmtT(eH,eM,eAP)+'</span>')
       + row('👥 Attendees',escapeHtml(v('f-attendees')))
@@ -1953,6 +2016,10 @@ async function submitBooking(){
       // backend defaults endDateKey to the start date automatically.
       endDate: selEndDate ? selEndDate.toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'}) : undefined,
       endDateKey: selEndDate ? toKey(selEndDate) : undefined,
+      // WEEKLY RECURRING: omitted for a normal one-off booking. Mutually
+      // exclusive with multi-day - the UI never lets both be set at once.
+      // Fixed at 3 occurrences server-side, so no until-date to send.
+      recurring: selRecurring ? true : undefined,
       time:fmtT(sH,sM,sAP), endTime:fmtT(eH,eM,eAP)
     };
   } else {
@@ -1987,9 +2054,19 @@ async function submitBooking(){
     pushNavState({view:'book', step:6});
     var prefix = bookingLocation==='ho' ? 'HO-' : 'KARIGAR-';
     document.getElementById('bid').textContent=prefix+data.id.substring(0,8).toUpperCase();
-    document.getElementById('success-msg').textContent = bookingLocation==='ho'
-      ? 'Your meeting room request is pending approval from the admin team.'
-      : 'Your session request is pending approval from the Karigar team.';
+    if(data.recurGroupId){
+      // WEEKLY RECURRING: one combined confirmation covering every
+      // occurrence, rather than the plain single-booking message.
+      var skippedNote = (data.skippedDates && data.skippedDates.length)
+        ? ' '+data.skippedDates.length+' date(s) already conflicted and were skipped: '+data.skippedDates.join(', ')+'.'
+        : '';
+      document.getElementById('success-msg').textContent =
+        'Your recurring meeting request ('+data.createdCount+' weekly occurrence'+(data.createdCount>1?'s':'')+') is pending approval from the admin team, who will approve or decline the whole series in one action.'+skippedNote;
+    } else {
+      document.getElementById('success-msg').textContent = bookingLocation==='ho'
+        ? 'Your meeting room request is pending approval from the admin team.'
+        : 'Your session request is pending approval from the Karigar team.';
+    }
     await refreshCalendarData();
   } else {
     showEl(err,'⚠️ '+(data&&data.error?data.error:'Booking backend is not connected yet. Add your Apps Script URL in BACKEND_SCRIPT_URL inside the HTML file.'));
@@ -2023,31 +2100,53 @@ async function checkStatus(){
           :b.status==='Declined'?(b.declineReason?'❌ Not approved — '+escapeHtml(b.declineReason):'❌ This booking was not approved.')
           :b.status==='Cancelled'?'🚫 This booking was cancelled.'
           :'⏳ Pending review — you\'ll be notified once confirmed.';
-        // Reschedule form: only in reschedule mode, only for Pending/Approved —
-        // both Karigar and Head Office (HO includes the multi-day option).
-        var showReschedule=rescheduleMode&&(b.status==='Pending'||b.status==='Approved');
+        // Reschedule form: only in reschedule mode, only for Pending/Approved,
+        // and only if the booking's date hasn't already passed — you can't
+        // reschedule something that's already happened.
+        var relevantKey = b.endDateKey || b.dateKey;
+        var isPastBooking = relevantKey && relevantKey < todayKey();
+        var showReschedule=rescheduleMode&&(b.status==='Pending'||b.status==='Approved')&&!isPastBooking;
         // Book Again button: only in My Booking mode, only for Declined/Cancelled
         var showRebook=!rescheduleMode&&(b.status==='Declined'||b.status==='Cancelled');
         // Update Budget Info: only in My Booking mode, HO bookings with Lunch/Hi-Tea
         // requested and a live (not declined/cancelled) booking, where EITHER budget
         // is still marked "No", OR it's "Yes" but somehow has no attachment on file
         // (e.g. from before Drive access was authorized) - lets that be backfilled
-        // here instead of needing a manual sheet edit.
+        // here instead of needing a manual sheet edit. Also date-gated - no point
+        // updating budget info for a meeting that's already over.
         var reqsStr=String(b.additionalRequirements||'');
         var needsBudgetBackfill=b.budgetApproval==='Yes'&&!b.budgetAttachmentFileId&&!b.budgetAttachmentUrl;
-        var showBudgetUpdate=!rescheduleMode&&isHO&&(b.status==='Pending'||b.status==='Approved')
+        var showBudgetUpdate=!rescheduleMode&&isHO&&(b.status==='Pending'||b.status==='Approved')&&!isPastBooking
           &&reqsStr.indexOf('Lunch / Hi-Tea')>-1&&(b.budgetApproval==='No'||needsBudgetBackfill);
+        // Self-service cancel: available in either view (My Booking or
+        // Reschedule), for a still-live, not-yet-passed booking — someone
+        // browsing Reschedule might realize they actually just want to
+        // cancel instead, so this isn't limited to My Booking mode.
+        var showCancel=(b.status==='Pending'||b.status==='Approved')&&!isPastBooking;
+        var cancelHtml = showCancel ? (
+          '<div style="margin-top:10px" id="cancel-wrap-'+b.id+'">'
+          +'<button class="btn btn-s" style="font-size:.82rem;padding:9px 16px;width:auto;color:#ef4444;border-color:#fca5a5" onclick="showCancelConfirm(\''+b.id+'\')">✕ Cancel This Booking</button>'
+          +'</div>'
+          +'<div class="hidden" id="cancel-confirm-'+b.id+'" style="margin-top:10px;padding:12px;background:#fef2f2;border:1px solid #fca5a5;border-radius:10px">'
+          +'<p style="font-size:.82rem;color:#991b1b;margin-bottom:10px">Are you sure? This cannot be undone.</p>'
+          +'<button class="btn btn-p" style="background:#ef4444;font-size:.8rem;padding:8px 14px;width:auto;margin-right:8px" onclick="cancelMyBooking(\''+b.id+'\',\''+(isHO?'ho':'karigar')+'\')">Yes, Cancel It</button>'
+          +'<button class="btn btn-s" style="font-size:.8rem;padding:8px 14px;width:auto" onclick="hideCancelConfirm(\''+b.id+'\')">Never Mind</button>'
+          +'<div id="cancel-msg-'+b.id+'" style="margin-top:8px"></div>'
+          +'</div>'
+        ) : '';
         var locTag='<span class="loc-tag '+(isHO?'loc-tag-ho':'loc-tag-karigar')+'">'+(isHO?'Head Office':'Karigar')+'</span>';
         var rowsHtml = isHO
-          ? row('📁 Project',b.projectName||'—')+row('🚪 Room',b.room||'—')+row('🪑 Seating Setup',b.seatingSetup||'—')+row('👥 Attendees',b.attendees||'—')+((b.namedAttendees&&b.namedAttendees.length)?row('🙋 Named Attendees',b.namedAttendees.map(function(p){return escapeHtml(p.name||p.email);}).join(', ')):'')+row('📝 Remarks',b.purpose||'None')+row('📋 Requirements',escapeHtml(b.additionalRequirements||'None'))+(b.budgetApproval?row('💰 Budget Approval',b.budgetApproval):'')+row('📅 Date',b.dateRange||b.date)+row('🕐 From',b.time||'—')+row('🕔 To',b.endTime||'—')
+          ? row('📁 Project',b.projectName||'—')+row('🚪 Room',b.room||'—')+row('🪑 Seating Setup',b.seatingSetup||'—')+row('👥 Attendees',b.attendees||'—')+((b.namedAttendees&&b.namedAttendees.length)?row('🙋 Named Attendees',b.namedAttendees.map(function(p){return escapeHtml(p.name||p.email);}).join(', ')):'')+row('📝 Remarks',b.purpose||'None')+row('📋 Requirements',escapeHtml(b.additionalRequirements||'None'))+(b.budgetApproval?row('💰 Budget Approval',b.budgetApproval):'')+(b.recurGroupId?row('Weekly Series','Occurrence '+(b.recurIndex||'—')+' of '+(b.recurTotal||'—')):'')+row('📅 Date',b.dateRange||b.date)+row('🕐 From',b.time||'—')+row('🕔 To',b.endTime||'—')
           : row('⏱ Session Type',b.duration||'—')+row('🏷 Type of Work',b.typeOfWork||b.service||'—')+row('🏫 Labs',b.labs||'—')+row('📝 Details',b.workDetails||'—')+row('📋 Requirements',escapeHtml(b.additionalRequirements||'None'))+row('📅 Date',b.dateRange||b.date)+row('🕐 From',b.time||'—')+row('🕔 To',b.endTime||'—');
+        var recurBadge = b.recurGroupId ? ' <span class="pill" style="background:#ede9fe;color:#5b21b6;font-size:.68rem">Weekly</span>' : '';
         return '<div class="stcard">'
-          +'<div class="stcard-head"><strong>'+locTag+(isHO?(b.room||'Meeting'):(b.typeOfWork||b.service||'—'))+'</strong><span class="stb stb-'+b.status+'">'+b.status+'</span></div>'
+          +'<div class="stcard-head"><strong>'+locTag+(isHO?(b.room||'Meeting'):(b.typeOfWork||b.service||'—'))+recurBadge+'</strong><span class="stb stb-'+b.status+'">'+b.status+'</span></div>'
           +rowsHtml
           +'<div class="stmsg '+mc+'">'+mt+'</div>'
           +(showRebook?'<div style="margin-top:12px"><button class="btn btn-p" style="font-size:.82rem;padding:9px 16px;width:auto" onclick="showSection(\'book\',document.getElementById(\'ai-book\'))">📅 Book a New Session</button></div>':'')
           +(showReschedule?rescheduleBlock(b):'')
           +(showBudgetUpdate?budgetUpdateBlock(b,needsBudgetBackfill):'')
+          +cancelHtml
           +'</div>';
       }).join('');
     } else {
@@ -2266,6 +2365,33 @@ async function submitReschedule(bookingId, location){
   }
 }
 
+// ─── SELF-SERVICE CANCEL ────────────────────────────────────────────────────────
+function showCancelConfirm(id){
+  document.getElementById('cancel-wrap-'+id).classList.add('hidden');
+  document.getElementById('cancel-confirm-'+id).classList.remove('hidden');
+}
+function hideCancelConfirm(id){
+  document.getElementById('cancel-confirm-'+id).classList.add('hidden');
+  document.getElementById('cancel-wrap-'+id).classList.remove('hidden');
+}
+async function cancelMyBooking(id, location){
+  var email = (document.getElementById('sq').value||'').trim();
+  var msgEl = document.getElementById('cancel-msg-'+id);
+  if(!email){
+    msgEl.innerHTML='<div class="msg msg-err">Please search by your email above first.</div>';
+    return;
+  }
+  msgEl.innerHTML='<div class="msg msg-warn">⏳ Cancelling…</div>';
+  var data = await apiPost({action:'customerCancel', id:id, email:email, location:location});
+  if(data && data.success){
+    msgEl.innerHTML='<div class="msg msg-ok">✅ Booking cancelled. You\'ll receive a confirmation email.</div>';
+    await refreshCalendarData();
+    setTimeout(checkStatus, 1200);
+  } else {
+    msgEl.innerHTML='<div class="msg msg-err">⚠️ '+(data&&data.error?data.error:'Could not cancel. Please try again.')+'</div>';
+  }
+}
+
 // ─── API HELPERS ──────────────────────────────────────────────────────────────
 async function apiGetQuery(action,params){
   if(!SCRIPT_URL()) return {success:false,error:'No backend URL configured — BACKEND_SCRIPT_URL is empty.'};
@@ -2299,7 +2425,7 @@ async function apiPost(payload){
 
 // ─── FORM RESET ───────────────────────────────────────────────────────────────
 function resetForm(){
-  selDur=null;selDate=null;selEndDate=null;curStep=0;calBk={};rescheduleMode=false;bookingLocation=null;selRoom=null;
+  selDur=null;selDate=null;selEndDate=null;selRecurring=false;curStep=0;calBk={};rescheduleMode=false;bookingLocation=null;selRoom=null;
   ['f-name','f-phone','f-email','f-work-details','f-purpose','f-attendees','f-room-display','f-project','f-seating-other'].forEach(function(id){
     var el=document.getElementById(id); if(el) el.value='';
   });
@@ -2337,6 +2463,7 @@ function resetForm(){
 function v(id){return document.getElementById(id).value.trim();}
 function pad(n){return String(n).padStart(2,'0');}
 function toKey(d){return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
+function todayKey(){return toKey(new Date());}
 function fmtT(h,m,ap){return h+':'+(m===0?'00':pad(m))+' '+ap;}
 function toMins(h,m,ap){var h2=h%12;if(ap==='PM')h2+=12;return h2*60+m;}
 
