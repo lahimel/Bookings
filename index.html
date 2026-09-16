@@ -1139,7 +1139,7 @@ textarea{min-height:96px;resize:vertical}
               <option value="Yes">Yes</option>
               <option value="No">No</option>
             </select>
-            <div style="font-size:.71rem;color:var(--muted);margin-top:6px">Required since Lunch / Hi-Tea is requested.</div>
+            <div style="font-size:.71rem;color:var(--muted);margin-top:6px" id="budget-approval-note">Required since Lunch / Hi-Tea is requested.</div>
             <div style="margin-top:12px">
               <label for="f-budget-attachment">Attach Supporting Document <span class="form-section-opt" id="budget-attachment-optional-tag">(Optional)</span></label>
               <input type="file" id="f-budget-attachment" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onchange="onBudgetAttachmentChange(this)"/>
@@ -1463,6 +1463,9 @@ function goStep(n){
       var type=v('f-type'),details=v('f-work-details'),labs=getSelectedLabs();
       if(!nm||!ph||!em||!type||!details||!labs.length){showEl(err,'Please fill in all required fields, including at least one lab.');return;}
       if(type==='Other' && !document.getElementById('f-type-other').value.trim()){showEl(err,'Please specify your "Other" session type.');return;}
+      var foodCb=document.getElementById('req-cb-food');
+      if(foodCb && foodCb.checked && !v('f-budget-approval')){showEl(err,'Please indicate whether budget approval has been obtained for Food & Refreshments.');return;}
+      if(foodCb && foodCb.checked && v('f-budget-approval')==='Yes' && !budgetAttachment){showEl(err,'Please attach the supporting document, since Budget Approval is marked as Yes.');return;}
     }
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)){showEl(err,'Enter a valid email address.');return;}
     if(!/^\d{10}$/.test(ph)){showEl(err,'Phone must be exactly 10 digits.');return;}
@@ -1987,7 +1990,9 @@ function buildSummary(){
       + row('👤 Name',v('f-name'))
       + row('📞 Phone',v('f-phone'))
       + row('📧 Email',v('f-email'))
-      + row('📋 Requirements',escapeHtml(getSelectedReqs().join(', ')||'None'));
+      + row('📋 Requirements',escapeHtml(getSelectedReqs().join(', ')||'None'))
+      + budgetRow
+      + attachmentRow;
   document.getElementById('summ').innerHTML = html;
 }
 function row(l,val){return '<div class="sr"><span class="sl2">'+l+'</span><span class="sv">'+val+'</span></div>';}
@@ -2038,6 +2043,10 @@ async function submitBooking(){
       workDetails:workDetails,
       typeOtherDetail:(typeOfWork==='Other'?(document.getElementById('f-type-other').value.trim()):''),
       additionalRequirements:getSelectedReqs(),
+      budgetApproval:v('f-budget-approval'),
+      budgetAttachmentName:budgetAttachment?budgetAttachment.name:'',
+      budgetAttachmentMimeType:budgetAttachment?budgetAttachment.mimeType:'',
+      budgetAttachmentBase64:budgetAttachment?budgetAttachment.base64:'',
       date:selDate.toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'}),
       dateKey:toKey(selDate),
       // MULTI-DAY: omitted for a single-day booking, in which case the
@@ -2116,16 +2125,19 @@ async function checkStatus(){
         var showReschedule=rescheduleMode&&(b.status==='Pending'||b.status==='Approved')&&!isPastBooking;
         // Book Again button: only in My Booking mode, only for Declined/Cancelled
         var showRebook=!rescheduleMode&&(b.status==='Declined'||b.status==='Cancelled');
-        // Update Budget Info: only in My Booking mode, HO bookings with Lunch/Hi-Tea
-        // requested and a live (not declined/cancelled) booking, where EITHER budget
-        // is still marked "No", OR it's "Yes" but somehow has no attachment on file
-        // (e.g. from before Drive access was authorized) - lets that be backfilled
-        // here instead of needing a manual sheet edit. Also date-gated - no point
-        // updating budget info for a meeting that's already over.
+        // Update Budget Info: only in My Booking mode, for a live (not
+        // declined/cancelled) booking that requested the location's own
+        // budget-gated item (Lunch/Hi-Tea for HO, Food & Refreshments for
+        // Karigar), where EITHER budget is still marked "No", OR it's "Yes"
+        // but somehow has no attachment on file (e.g. from before Drive
+        // access was authorized) - lets that be backfilled here instead of
+        // needing a manual sheet edit. Also date-gated - no point updating
+        // budget info for a meeting that's already over.
         var reqsStr=String(b.additionalRequirements||'');
         var needsBudgetBackfill=b.budgetApproval==='Yes'&&!b.budgetAttachmentFileId&&!b.budgetAttachmentUrl;
-        var showBudgetUpdate=!rescheduleMode&&isHO&&(b.status==='Pending'||b.status==='Approved')&&!isPastBooking
-          &&reqsStr.indexOf('Lunch / Hi-Tea')>-1&&(b.budgetApproval==='No'||needsBudgetBackfill);
+        var gatedItemKey = isHO ? 'Lunch / Hi-Tea' : 'Food & Refreshments';
+        var showBudgetUpdate=!rescheduleMode&&(b.status==='Pending'||b.status==='Approved')&&!isPastBooking
+          &&reqsStr.indexOf(gatedItemKey)>-1&&(b.budgetApproval==='No'||needsBudgetBackfill);
         // Self-service cancel: available in either view (My Booking or
         // Reschedule), for a still-live, not-yet-passed booking — someone
         // browsing Reschedule might realize they actually just want to
@@ -2208,12 +2220,12 @@ function budgetUpdateBlock(booking,isBackfill){
     +'<div style="font-size:.78rem;color:#78716c;margin-bottom:10px">'+intro+'</div>'
     +'<div class="fg"><label>Attach Supporting Document <span class="form-section-opt" style="color:#c0392b">(Required)</span></label>'
     +'<input type="file" id="bu-file-'+booking.id+'" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"/></div>'
-    +'<button class="btn-accent" id="bu-btn-'+booking.id+'" onclick="submitBudgetUpdate(\''+booking.id+'\','+(isBackfill?'true':'false')+')">'+buttonLabel+'</button>'
+    +'<button class="btn-accent" id="bu-btn-'+booking.id+'" onclick="submitBudgetUpdate(\''+booking.id+'\','+(isBackfill?'true':'false')+',\''+booking.location+'\')">'+buttonLabel+'</button>'
     +'<div id="bu-msg-'+booking.id+'" style="margin-top:8px"></div>'
     +'</div></div>';
 }
 
-async function submitBudgetUpdate(bookingId,isBackfill){
+async function submitBudgetUpdate(bookingId,isBackfill,location){
   var fileInput=document.getElementById('bu-file-'+bookingId);
   var btn=document.getElementById('bu-btn-'+bookingId);
   var msgEl=document.getElementById('bu-msg-'+bookingId);
@@ -2234,7 +2246,8 @@ async function submitBudgetUpdate(bookingId,isBackfill){
   btn.disabled=true; btn.textContent=busyLabel;
   msgEl.innerHTML='';
 
-  var payload={action:'updateBudgetHO',bookingId:bookingId,budgetApproval:'Yes'};
+  var action = location==='Head Office' ? 'updateBudgetHO' : 'updateBudgetKarigar';
+  var payload={action:action,bookingId:bookingId,budgetApproval:'Yes'};
 
   if(file){
     try{
@@ -2526,14 +2539,23 @@ function toggleReq(key){
   updateBudgetApprovalVisibility();
 }
 
-// Budget Approval only applies to HO bookings where Lunch / Hi-Tea is checked.
-// Karigar has no split checkboxes and no Budget Approval field at all.
+// Budget Approval applies whenever the location's own budget-gated item is
+// checked - Lunch / Hi-Tea for HO, Food & Refreshments for Karigar. Each
+// location only ever sees its own checkbox (via req-ho-only/req-karigar-only),
+// so checking both here is safe - only one can actually be visible/checked
+// at a time for a given booking.
 function updateBudgetApprovalVisibility(){
   var wrap=document.getElementById('budget-approval-wrap');
   if(!wrap) return;
-  var lunchCb=document.getElementById('req-cb-lunchhitea');
-  var show = bookingLocation==='ho' && lunchCb && lunchCb.checked;
+  var gatedCb = bookingLocation==='ho'
+    ? document.getElementById('req-cb-lunchhitea')
+    : document.getElementById('req-cb-food');
+  var show = gatedCb && gatedCb.checked;
   wrap.classList.toggle('hidden', !show);
+  var note=document.getElementById('budget-approval-note');
+  if(note) note.textContent = bookingLocation==='ho'
+    ? 'Required since Lunch / Hi-Tea is requested.'
+    : 'Required since Food & Refreshments is requested.';
   if(!show){
     var sel=document.getElementById('f-budget-approval');
     if(sel) sel.value='';
