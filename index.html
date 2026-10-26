@@ -1059,8 +1059,8 @@ textarea{min-height:96px;resize:vertical}
             </div>
           </div>
           <div class="fg">
-            <label>Session Description *</label>
-            <textarea id="f-work-details" rows="4" placeholder="Briefly describe what you'll be doing, how many people are joining, and any special setup needed…"></textarea>
+            <label>Project Name *</label>
+            <input id="f-karigar-project" type="text" placeholder="Which project is this session for?"/>
           </div>
         </div>
 
@@ -1135,6 +1135,7 @@ textarea{min-height:96px;resize:vertical}
               <option value="No">No</option>
             </select>
             <div style="font-size:.71rem;color:var(--muted);margin-top:6px" id="budget-approval-note">Required since Lunch / Hi-Tea is requested.</div>
+            <div id="budget-no-note" class="hidden" style="margin-top:8px;padding:9px 12px;border-radius:8px;background:#fffbeb;border:1px solid #fcd34d;color:#92400e;font-size:.78rem;line-height:1.5"></div>
             <div style="margin-top:12px">
               <label for="f-budget-attachment">Attach Supporting Document <span class="form-section-opt" id="budget-attachment-optional-tag">(Optional)</span></label>
               <input type="file" id="f-budget-attachment" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onchange="onBudgetAttachmentChange(this)"/>
@@ -1457,8 +1458,8 @@ function goStep(n){
       if(lunchCb && lunchCb.checked && !v('f-budget-approval')){showEl(err,'Please indicate whether budget approval has been obtained for Lunch / Hi-Tea.');return;}
       if(lunchCb && lunchCb.checked && v('f-budget-approval')==='Yes' && !budgetAttachment){showEl(err,'Please attach the supporting document, since Budget Approval is marked as Yes.');return;}
     } else {
-      var type=v('f-type'),details=v('f-work-details'),labs=getSelectedLabs();
-      if(!nm||!ph||!em||!type||!details||!labs.length){showEl(err,'Please fill in all required fields, including at least one lab.');return;}
+      var type=v('f-type'),kProject=v('f-karigar-project'),labs=getSelectedLabs();
+      if(!nm||!ph||!em||!type||!kProject||!labs.length){showEl(err,'Please fill in all required fields, including at least one lab.');return;}
       if(type==='Other' && !document.getElementById('f-type-other').value.trim()){showEl(err,'Please specify your "Other" session type.');return;}
       var foodCb=document.getElementById('req-cb-food');
       if(foodCb && foodCb.checked && !v('f-budget-approval')){showEl(err,'Please indicate whether budget approval has been obtained for Food & Refreshments.');return;}
@@ -1974,7 +1975,7 @@ function buildSummary(){
       + row('🕔 To','<span class="pill pill-t">'+fmtT(eH,eM,eAP)+'</span>')
       + row('🗂 Type of Work',v('f-type'))
       + row('🏫 Labs',escapeHtml(getSelectedLabs().join(', ')))
-      + row('📝 Details',escapeHtml(v('f-work-details')))
+      + row('📁 Project',escapeHtml(v('f-karigar-project')))
       + row('👤 Name',v('f-name'))
       + row('📞 Phone',v('f-phone'))
       + row('📧 Email',v('f-email'))
@@ -2020,7 +2021,6 @@ async function submitBooking(){
   } else {
     var typeOfWork=v('f-type');
     var labs=getSelectedLabs();
-    var workDetails=v('f-work-details');
     payload={
       action:'book',
       duration:DUR_LBL[selDur],
@@ -2028,7 +2028,7 @@ async function submitBooking(){
       service:typeOfWork,
       typeOfWork:typeOfWork,
       labs:labs,
-      workDetails:workDetails,
+      projectName:v('f-karigar-project'),
       typeOtherDetail:(typeOfWork==='Other'?(document.getElementById('f-type-other').value.trim()):''),
       additionalRequirements:getSelectedReqs(),
       budgetApproval:v('f-budget-approval'),
@@ -2072,6 +2072,11 @@ async function submitBooking(){
         ? 'Your meeting room request is pending approval from the admin team.'
         : 'Your session request is pending approval from the Karigar team.';
     }
+    // Catering needs an approved budget - if they said it hasn't been obtained,
+    // make clear that only the venue booking is being processed.
+    if(payload.budgetApproval==='No'){
+      document.getElementById('success-msg').textContent += ' Note: because budget approval has not been obtained, only the venue booking will be processed. Your '+(bookingLocation==='ho'?'Lunch / Hi-Tea':'Food & Refreshments')+' request stays on hold until the budget is approved.';
+    }
     await refreshCalendarData();
   } else {
     showEl(err,'⚠️ '+(data&&data.error?data.error:'Booking backend is not connected yet. Add your Apps Script URL in BACKEND_SCRIPT_URL inside the HTML file.'));
@@ -2105,6 +2110,15 @@ async function checkStatus(){
           :b.status==='Declined'?(b.declineReason?'❌ Not approved — '+escapeHtml(b.declineReason):'❌ This booking was not approved.')
           :b.status==='Cancelled'?'🚫 This booking was cancelled.'
           :'⏳ Pending review — you\'ll be notified once confirmed.';
+        // Catering needs an approved budget. If the requester said it hasn't been
+        // obtained, only the venue booking is processed - tell them, until the
+        // catering contact has decided either way.
+        var gatedName = isHO ? 'Lunch / Hi-Tea' : 'Food & Refreshments';
+        var budgetHoldNote = '';
+        if(b.budgetApproval==='No' && String(b.additionalRequirements||'').indexOf(gatedName)>-1 && (b.status==='Pending'||b.status==='Approved')){
+          if(!b.budgetDecisionStatus) budgetHoldNote = 'Budget approval has not been obtained, so only the venue booking '+(b.status==='Approved'?'has been':'will be')+' processed. Your '+gatedName+' request is on hold until the budget is approved - confirm it from this page once it is.';
+          else if(b.budgetDecisionStatus==='Declined') budgetHoldNote = 'Your '+gatedName+' request was not taken forward because the budget was not approved. Only the venue booking has been processed.';
+        }
         // Reschedule form: only in reschedule mode, only for Pending/Approved,
         // and only if the booking's date hasn't already passed — you can't
         // reschedule something that's already happened.
@@ -2149,12 +2163,13 @@ async function checkStatus(){
         var requesterRow = b.requesterEmail ? row('Requester', escapeHtml(b.name||'—')+' &lt;'+escapeHtml(b.requesterEmail)+'&gt;') : '';
         var rowsHtml = requesterRow + (isHO
           ? row('📁 Project',b.projectName||'—')+row('🚪 Room',b.room||'—')+row('🪑 Seating Setup',b.seatingSetup||'—')+row('👥 Attendees',b.attendees||'—')+((b.namedAttendees&&b.namedAttendees.length)?row('🙋 Named Attendees',b.namedAttendees.map(function(p){return escapeHtml(p.name||p.email);}).join(', ')):'')+(b.purpose?row('📝 Remarks',escapeHtml(b.purpose)):'')+row('📋 Requirements',escapeHtml(b.additionalRequirements||'None'))+(b.budgetApproval?row('💰 Budget Approval',b.budgetApproval):'')+(b.recurGroupId?row('Weekly Series','Occurrence '+(b.recurIndex||'—')+' of '+(b.recurTotal||'—')):'')+row('📅 Date',b.dateRange||b.date)+row('🕐 From',b.time||'—')+row('🕔 To',b.endTime||'—')
-          : row('⏱ Session Type',b.duration||'—')+row('🏷 Type of Work',b.typeOfWork||b.service||'—')+row('🏫 Labs',b.labs||'—')+row('📝 Details',b.workDetails||'—')+row('📋 Requirements',escapeHtml(b.additionalRequirements||'None'))+row('📅 Date',b.dateRange||b.date)+row('🕐 From',b.time||'—')+row('🕔 To',b.endTime||'—'));
+          : row('⏱ Session Type',b.duration||'—')+row('🏷 Type of Work',b.typeOfWork||b.service||'—')+row('🏫 Labs',b.labs||'—')+(b.projectName?row('📁 Project',escapeHtml(b.projectName)):'')+(b.workDetails?row('📝 Details',escapeHtml(b.workDetails)):'')+row('📋 Requirements',escapeHtml(b.additionalRequirements||'None'))+row('📅 Date',b.dateRange||b.date)+row('🕐 From',b.time||'—')+row('🕔 To',b.endTime||'—'));
         var recurBadge = b.recurGroupId ? ' <span class="pill" style="background:#ede9fe;color:#5b21b6;font-size:.68rem">Weekly</span>' : '';
         return '<div class="stcard">'
           +'<div class="stcard-head"><strong>'+locTag+(isHO?(b.room||'Meeting'):(b.typeOfWork||b.service||'—'))+recurBadge+'</strong><span class="stb stb-'+b.status+'">'+b.status+'</span></div>'
           +rowsHtml
           +'<div class="stmsg '+mc+'">'+mt+'</div>'
+          +(budgetHoldNote?'<div class="stmsg sm-p" style="margin-top:8px">'+escapeHtml(budgetHoldNote)+'</div>':'')
           +(showRebook?'<div style="margin-top:12px"><button class="btn btn-p" style="font-size:.82rem;padding:9px 16px;width:auto" onclick="showSection(\'book\',document.getElementById(\'ai-book\'))">📅 Book a New Session</button></div>':'')
           +(showReschedule?rescheduleBlock(b):'')
           +(showBudgetUpdate?budgetUpdateBlock(b,needsBudgetBackfill):'')
@@ -2442,7 +2457,7 @@ async function apiPost(payload){
 // ─── FORM RESET ───────────────────────────────────────────────────────────────
 function resetForm(){
   selDur=null;selDate=null;selEndDate=null;selRecurring=false;curStep=0;calBk={};rescheduleMode=false;bookingLocation=null;selRoom=null;
-  ['f-name','f-phone','f-email','f-work-details','f-attendees','f-room-display','f-project','f-seating-other'].forEach(function(id){
+  ['f-name','f-phone','f-email','f-karigar-project','f-attendees','f-room-display','f-project','f-seating-other'].forEach(function(id){
     var el=document.getElementById(id); if(el) el.value='';
   });
   document.getElementById('f-type').value='';
@@ -2564,13 +2579,22 @@ var BUDGET_ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024; // 5 MB
 // claims budget IS approved ("Yes").
 function onBudgetApprovalChange(){
   var tag=document.getElementById('budget-attachment-optional-tag');
-  if(!tag) return;
-  if(v('f-budget-approval')==='Yes'){
-    tag.textContent='(Required)';
-    tag.style.color='#c0392b';
-  } else {
-    tag.textContent='(Optional)';
-    tag.style.color='';
+  if(tag){
+    if(v('f-budget-approval')==='Yes'){
+      tag.textContent='(Required)';
+      tag.style.color='#c0392b';
+    } else {
+      tag.textContent='(Optional)';
+      tag.style.color='';
+    }
+  }
+  // Without budget approval only the venue itself gets booked - say so up
+  // front, at the moment they choose "No", rather than after the fact.
+  var noNote=document.getElementById('budget-no-note');
+  if(noNote){
+    var item = bookingLocation==='ho' ? 'Lunch / Hi-Tea' : 'Food & Refreshments';
+    noNote.textContent='Without budget approval, only the venue booking will be processed. Your '+item+' request will stay on hold until the budget is approved - you can confirm it later from My Booking.';
+    noNote.classList.toggle('hidden', v('f-budget-approval')!=='No');
   }
 }
 
