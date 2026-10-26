@@ -912,7 +912,6 @@ textarea{min-height:96px;resize:vertical}
         <div class="date-box">
           <div class="date-label">Select your booking date</div>
           <input type="date" id="date-picker" class="date-input" onchange="onDatePick(this.value)"/>
-          <div class="date-note">⏳ Bookings must be at least <strong>5 days in advance</strong>. Sundays are open.</div>
           <div id="date-err" class="msg msg-err hidden"></div>
           <div id="date-ok"  class="msg msg-ok  hidden"></div>
 
@@ -1237,8 +1236,10 @@ const ROOMS = [
 ];
 
 function SCRIPT_URL(){return BACKEND_SCRIPT_URL;}
-function minLeadDate(loc){var days=(loc==='ho')?0:5; var d=new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()+days); return d;}
-function isDateBookable(d,loc){var min=minLeadDate(loc); return d>=min;}
+// Neither location has a minimum lead time - today is the earliest bookable
+// date. (Karigar used to require 5 days' notice; that rule was removed.)
+function earliestBookableDate(){var d=new Date(); d.setHours(0,0,0,0); return d;}
+function isDateBookable(d){return d>=earliestBookableDate();}
 function getSelectedLabs(){return Array.from(document.querySelectorAll('input[name="f-lab"]:checked')).map(function(el){return el.value;});}
 function clearSelectedLabs(){document.querySelectorAll('input[name="f-lab"]').forEach(function(el){el.checked=false;});}
 
@@ -1477,9 +1478,8 @@ function goStep(n){
     if(toMins(sH,sM,sAP)>=toMins(eH,eM,eAP)){
       document.getElementById('time-err').classList.remove('hidden'); return;
     }
-    // Same-day HO bookings are allowed (no minimum lead time), but the start
-    // time still needs to be later than right now - Karigar never hits this
-    // since it always requires several days' lead time regardless.
+    // Same-day bookings are allowed for both Karigar and HO (no minimum lead
+    // time), but the start time still needs to be later than right now.
     var now=new Date();
     if(selDate && toKey(selDate)===toKey(now) && toMins(sH,sM,sAP)<=(now.getHours()*60+now.getMinutes())){
       document.getElementById('time-err').textContent='⚠️ That time has already passed today. Please choose a later time.';
@@ -1516,16 +1516,9 @@ function initStep2(){
               : 'View the calendar above, then pick your date below');
   updateCalEmbed();
   var dp=document.getElementById('date-picker');
-  var minDate=minLeadDate(bookingLocation);
+  var minDate=earliestBookableDate();
   dp.min=toKey(minDate);
   dp.removeAttribute('max');
-  var noteEl=document.querySelector('.date-note');
-  if(noteEl){
-    noteEl.innerHTML = bookingLocation==='ho'
-      ? ''
-      : '⏳ Bookings must be at least <strong>5 days in advance</strong>. Sundays are open.';
-    noteEl.style.display = bookingLocation==='ho' ? 'none' : '';
-  }
   var mdWrap=document.getElementById('multiday-wrap');
   if(mdWrap) mdWrap.classList.remove('hidden'); // now available for both Karigar and HO
   var edNote=document.getElementById('enddate-note');
@@ -1678,8 +1671,8 @@ function onDatePick(val){
   var parts=val.split('-');
   var picked=new Date(parseInt(parts[0]),parseInt(parts[1])-1,parseInt(parts[2]));
   picked.setHours(0,0,0,0);
-  if(!isDateBookable(picked,bookingLocation)){
-    showEl(errEl, bookingLocation==='ho' ? '⚠️ Please select today or a later date.' : '⚠️ Bookings must be made at least 5 days in advance.');
+  if(!isDateBookable(picked)){
+    showEl(errEl,'⚠️ Please select today or a later date.');
     selDate=null; renderDateTiles(); return;
   }
   if(bookingLocation==='ho' && picked.getDay()===0){
@@ -1735,7 +1728,7 @@ function renderDateTiles(){
   var wrap=document.getElementById('date-tiles');
   if(!wrap) return;
   var isHO=bookingLocation==='ho';
-  var start=minLeadDate(bookingLocation);
+  var start=earliestBookableDate();
   var scanDays=isHO?24:21; // HO scans a bit further since Sundays are skipped, keeping ~21 visible tiles
   var html='';
   for(var i=0;i<scanDays;i++){
@@ -2283,8 +2276,8 @@ async function submitBudgetUpdate(bookingId,isBackfill,location){
 
 function rescheduleBlock(booking){
   var isHOBooking = booking.location==='Head Office';
-  var minD = rsMinDate(isHOBooking?'ho':'karigar');
-  var dateLabel = isHOBooking ? 'New Date (same-day is fine)' : 'New Date (must be at least 5 days from today)';
+  var minD = rsMinDate();
+  var dateLabel = 'New Date (same-day is fine)';
   // Multi-day option, both Karigar and HO — mirrors the toggle used on the initial booking form.
   var multiDayHtml = '<label style="display:flex;align-items:center;gap:8px;font-size:.82rem;cursor:pointer;margin:2px 0 8px">'
       +'<input type="checkbox" id="rs-multiday-'+booking.id+'" onchange="onRsMultiDayToggle(\''+booking.id+'\',this.checked)" style="width:15px;height:15px;accent-color:#c96f53">'
@@ -2338,8 +2331,8 @@ async function submitReschedule(bookingId, location){
   var parts=newDate.split('-');
   var d=new Date(parseInt(parts[0]),parseInt(parts[1])-1,parseInt(parts[2]));
   d.setHours(0,0,0,0);
-  if(!isDateBookable(d,location)){
-    msgEl.innerHTML='<div class="msg msg-err">'+(isHOBooking?'Please select today or a later date.':'Bookings must be made at least 5 days in advance.')+'</div>';
+  if(!isDateBookable(d)){
+    msgEl.innerHTML='<div class="msg msg-err">Please select today or a later date.</div>';
     return;
   }
   if(isHOBooking && d.getDay()===0){
@@ -2507,7 +2500,7 @@ function deriveDurationType(){
 function parseT(ts){if(!ts)return null;var m=(ts+'').match(/(\d+):(\d+)\s*(AM|PM)/i);return m?toMins(parseInt(m[1]),parseInt(m[2]),m[3].toUpperCase()):null;}
 function hide(id){document.getElementById(id).classList.add('hidden');}
 function showEl(el,txt){el.textContent=txt;el.classList.remove('hidden');}
-function rsMinDate(loc){return toKey(minLeadDate(loc));}
+function rsMinDate(){return toKey(earliestBookableDate());}
 function escapeHtml(str){
   return String(str||'').replace(/[&<>"']/g, function(ch){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch];
